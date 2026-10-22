@@ -7,10 +7,35 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum Role {
+  PLATFORM_ADMIN
+  HOUSEHOLD_ADMIN
+  MEMBER
+  RESTRICTED_MEMBER // Kids / Guests (chores & waste only)
+}
+
+enum JoinRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model JoinRequest {
+  id          String            @id @default(uuid())
+  householdId String
+  household   Household         @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status      JoinRequestStatus @default(PENDING)
+  createdAt   DateTime          @default(now())
+
+  @@unique([householdId, userId])
+}
+
 model Household {
   id          String   @id @default(uuid())
   name        String
-  inviteCode  String   @unique
+  inviteCode  String   @unique // 6-digit alphanumeric code
   createdAt   DateTime @default(now())
 
   users          User[]
@@ -18,24 +43,35 @@ model Household {
   chores         Chore[]
   wasteSchedules WasteSchedule[]
   spaceBookings  SpaceBooking[]
+  joinRequests   JoinRequest[]
+  homeInfos          HomeInfo[]
+  notes              Note[]
 }
 
 model User {
-  id           String    @id @default(uuid())
-  householdId  String
-  household    Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  name         String
-  email        String    @unique
-  passwordHash String
-  avatarColor  String    @default("#06B6D4") // Cyan
-  status       String    @default("At Home")
-  createdAt    DateTime  @default(now())
+  id                 String     @id @default(uuid())
+  householdId        String?
+  household          Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
+  name               String
+  email              String     @unique
+  passwordHash       String
+  role               Role       @default(MEMBER)
+  avatarColor        String     @default("#06B6D4")
+  status             String     @default("At Home")
+  isEmailVerified    Boolean    @default(false)
+  verificationToken  String?    @unique
+  createdAt          DateTime   @default(now())
 
-  billsPaid     Bill[]
-  billSplits    BillSplit[]
-  chores        Chore[]
-  spaceBookings SpaceBooking[]
+  joinRequests       JoinRequest[]
+  billsPaid          Bill[]         @relation("BillPayer")
+  billSplits         BillSplit[]
+  choresAssigned     Chore[]    @relation("ChoreAssignee")
+  choresCreated      Chore[]    @relation("ChoreCreator")
+  spaceBookings      SpaceBooking[]
+  homeInfosCreated   HomeInfo[]     @relation("HomeInfoCreator")
+  notesCreated       Note[]         @relation("NoteCreator")
 }
+
 
 model WasteSchedule {
   id          String    @id @default(uuid())
@@ -49,19 +85,22 @@ model WasteSchedule {
 }
 
 model Bill {
-  id          String    @id @default(uuid())
-  householdId String
-  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  title       String
-  amount      Float
-  currency    String    @default("EUR")
-  dueDate     DateTime
-  paidById    String
-  paidBy      User      @relation(fields: [paidById], references: [id])
-  isSettled   Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-
-  splits      BillSplit[]
+  id            String      @id @default(uuid())
+  householdId   String
+  household     Household   @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  title         String
+  amount        Float
+  currency      String      @default("EUR") // EUR, USD, GBP, RON
+  isRecurring   Boolean     @default(false)
+  recurrence    String      @default("ONE_TIME") // ONE_TIME, MONTHLY, WEEKLY
+  billDate      DateTime    @default(now())
+  dueDate       DateTime
+  paidById      String
+  paidBy        User           @relation("BillPayer", fields: [paidById], references: [id])
+  splits        BillSplit[]
+  isSettled     Boolean     @default(false)
+  lastRemindedAt DateTime?
+  createdAt     DateTime    @default(now())
 }
 
 model BillSplit {
@@ -72,6 +111,7 @@ model BillSplit {
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   amountOwed Float
   isPaid     Boolean  @default(false)
+  createdAt  DateTime @default(now())
 }
 
 model Chore {
@@ -79,11 +119,17 @@ model Chore {
   householdId     String
   household       Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
   title           String
+  notes           String?
+  priority        String    @default("AUTO") // "AUTO", "LOW", "MEDIUM", "HIGH"
+  dueDate         DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("ChoreCreator", fields: [createdById], references: [id], onDelete: SetNull)
   assignedToId    String
-  assignedTo      User      @relation(fields: [assignedToId], references: [id])
-  rotationUserIds String[]  // Array of User UUIDs for round-robin
+  assignedTo      User      @relation("ChoreAssignee", fields: [assignedToId], references: [id])
+  rotationUserIds String[]
   intervalDays    Int       @default(7)
   lastCompletedAt DateTime?
+  createdAt       DateTime  @default(now())
 }
 
 model SpaceBooking {
@@ -97,3 +143,33 @@ model SpaceBooking {
   endTime     DateTime
   note        String?
 }
+
+model HomeInfo {
+  id           String    @id @default(uuid())
+  householdId  String
+  household    Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  title        String    // e.g. "Main Wi-Fi", "Rent Transfer IBAN"
+  category     String    // "WIFI", "PAYMENT", "APARTMENT", "EMERGENCY"
+  content      String    // The description or instructions
+  secretValue  String?   // Optional field for one-click copy (e.g., password, IBAN)
+  createdById  String
+  createdBy    User      @relation("HomeInfoCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Note {
+  id           String    @id @default(uuid())
+  householdId  String
+  household    Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  title        String
+  category     String    @default("SHOPPING") // "SHOPPING", "HOUSE_SUPPLIES", "GENERAL"
+  content      String?
+  items        Json?     // Array of { id: string, text: string, isChecked: boolean }
+  isPinned     Boolean   @default(false)
+  createdById  String
+  createdBy    User      @relation("NoteCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+

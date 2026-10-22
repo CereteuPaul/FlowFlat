@@ -4,6 +4,9 @@ import { Server } from "socket.io";
 import cors from "cors";
 import dotenv from "dotenv";
 import { PrismaClient } from "@prisma/client";
+import authRouter from "./routes/auth";
+import householdRouter from "./routes/household";
+import dashboardRouter from "./routes/dashboard";
 
 dotenv.config();
 
@@ -11,7 +14,6 @@ const app = express();
 const server = http.createServer(app);
 export const prisma = new PrismaClient();
 
-// Setup WebSocket server with permissive CORS for development
 export const io = new Server(server, {
   cors: {
     origin: "*",
@@ -22,7 +24,12 @@ export const io = new Server(server, {
 app.use(cors());
 app.use(express.json());
 
-// Basic health check route
+// Routes
+app.use("/api/auth", authRouter);
+app.use("/api/households", householdRouter);
+app.use("/api/dashboard", dashboardRouter);
+
+// Health check
 app.get("/health", (_req, res) => {
   res.json({ status: "healthy", timestamp: new Date() });
 });
@@ -31,7 +38,6 @@ app.get("/health", (_req, res) => {
 io.on("connection", (socket) => {
   console.log(`[Socket] Client connected: ${socket.id}`);
 
-  // Join a dedicated room for a specific household
   socket.on("join_household", (householdId: string) => {
     socket.join(householdId);
     console.log(`[Socket] Client ${socket.id} joined household ${householdId}`);
