@@ -1,0 +1,99 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Household {
+  id          String   @id @default(uuid())
+  name        String
+  inviteCode  String   @unique
+  createdAt   DateTime @default(now())
+
+  users          User[]
+  bills          Bill[]
+  chores         Chore[]
+  wasteSchedules WasteSchedule[]
+  spaceBookings  SpaceBooking[]
+}
+
+model User {
+  id           String    @id @default(uuid())
+  householdId  String
+  household    Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  name         String
+  email        String    @unique
+  passwordHash String
+  avatarColor  String    @default("#06B6D4") // Cyan
+  status       String    @default("At Home")
+  createdAt    DateTime  @default(now())
+
+  billsPaid     Bill[]
+  billSplits    BillSplit[]
+  chores        Chore[]
+  spaceBookings SpaceBooking[]
+}
+
+model WasteSchedule {
+  id          String    @id @default(uuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  wasteType   String    // "Plastic/Metal", "Paper", "Organic", "General"
+  colorTag    String    // Hex color badge
+  dayOfWeek   Int       // 0 = Sunday, 1 = Monday, etc.
+  frequency   String    // "WEEKLY" or "BIWEEKLY"
+  lastPutOut  DateTime?
+}
+
+model Bill {
+  id          String    @id @default(uuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  title       String
+  amount      Float
+  currency    String    @default("EUR")
+  dueDate     DateTime
+  paidById    String
+  paidBy      User      @relation(fields: [paidById], references: [id])
+  isSettled   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  splits      BillSplit[]
+}
+
+model BillSplit {
+  id         String   @id @default(uuid())
+  billId     String
+  bill       Bill     @relation(fields: [billId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amountOwed Float
+  isPaid     Boolean  @default(false)
+}
+
+model Chore {
+  id              String    @id @default(uuid())
+  householdId     String
+  household       Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  title           String
+  assignedToId    String
+  assignedTo      User      @relation(fields: [assignedToId], references: [id])
+  rotationUserIds String[]  // Array of User UUIDs for round-robin
+  intervalDays    Int       @default(7)
+  lastCompletedAt DateTime?
+}
+
+model SpaceBooking {
+  id          String    @id @default(uuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  spaceName   String    // "Living Room", "Kitchen"
+  startTime   DateTime
+  endTime     DateTime
+  note        String?
+}

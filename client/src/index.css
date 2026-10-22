@@ -1,0 +1,24 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-dark-bg: #090d16;
+  --color-dark-surface: #0f172a;
+  --color-dark-card: #1e293b;
+  --color-dark-border: #334155;
+  --color-accent-cyan: #06b6d4;
+  --color-accent-emerald: #10b981;
+  --color-accent-amber: #f59e0b;
+}
+
+body {
+  background-color: var(--color-dark-bg);
+  color: #f1f5f9;
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
