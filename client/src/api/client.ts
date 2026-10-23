@@ -4,6 +4,9 @@ export function getToken(): string | null {
   return localStorage.getItem('flowflat_token');
 }
 
+export const API_BASE_URL =
+  import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
+
 export function setToken(token: string) {
   localStorage.setItem('flowflat_token', token);
 }
