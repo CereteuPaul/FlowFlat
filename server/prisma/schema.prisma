@@ -32,44 +32,65 @@ model JoinRequest {
   @@unique([householdId, userId])
 }
 
-model Household {
-  id          String   @id @default(uuid())
-  name        String
-  inviteCode  String   @unique // 6-digit alphanumeric code
-  createdAt   DateTime @default(now())
-
-  users          User[]
-  bills          Bill[]
-  chores         Chore[]
-  wasteSchedules WasteSchedule[]
-  spaceBookings  SpaceBooking[]
-  joinRequests   JoinRequest[]
-  homeInfos          HomeInfo[]
-  notes              Note[]
-}
-
 model User {
-  id                 String     @id @default(uuid())
-  householdId        String?
-  household          Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
+  id                 String            @id @default(uuid())
   name               String
-  email              String     @unique
+  email              String            @unique
   passwordHash       String
-  role               Role       @default(MEMBER)
-  avatarColor        String     @default("#06B6D4")
-  status             String     @default("At Home")
-  isEmailVerified    Boolean    @default(false)
-  verificationToken  String?    @unique
-  createdAt          DateTime   @default(now())
+  avatarColor        String            @default("#06B6D4")
+  status             String            @default("HOME")
+  
+  // Legacy fields kept temporarily to preserve existing accounts/roles
+  role               String?           @default("MEMBER")
+  householdId        String?
+  isEmailVerified    Boolean           @default(false)
+  emailVerificationToken String?
+
+  // New multi-household fields
+  activeHouseholdId  String?
+  activeHousehold    Household?        @relation("ActiveHousehold", fields: [activeHouseholdId], references: [id])
+  memberships        HouseholdMember[]
 
   joinRequests       JoinRequest[]
-  billsPaid          Bill[]         @relation("BillPayer")
+  billsPaid          Bill[]            @relation("BillPayer")
   billSplits         BillSplit[]
-  choresAssigned     Chore[]    @relation("ChoreAssignee")
-  choresCreated      Chore[]    @relation("ChoreCreator")
+  choresCreated      Chore[]           @relation("ChoreCreator")
+  choresAssigned     Chore[]           @relation("ChoreAssignee")
   spaceBookings      SpaceBooking[]
-  homeInfosCreated   HomeInfo[]     @relation("HomeInfoCreator")
-  notesCreated       Note[]         @relation("NoteCreator")
+  homeInfosCreated   HomeInfo[]        @relation("HomeInfoCreator")
+  notesCreated       Note[]            @relation("NoteCreator")
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @default(now()) @updatedAt
+}
+
+model HouseholdMember {
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  householdId  String
+  household    Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  role         String    @default("MEMBER") // HOUSEHOLD_ADMIN, MEMBER, RESTRICTED_MEMBER
+  joinedAt     DateTime  @default(now())
+
+  @@unique([userId, householdId])
+}
+
+model Household {
+  id                 String            @id @default(uuid())
+  name               String
+  inviteCode         String            @unique
+  members            HouseholdMember[]
+  activeUsers        User[]            @relation("ActiveHousehold")
+
+  chores             Chore[]
+  wasteSchedules     WasteSchedule[]
+  bills              Bill[]
+  homeInfos          HomeInfo[]
+  notes              Note[]
+  spaceBookings      SpaceBooking[]
+  joinRequests       JoinRequest[]
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @default(now()) @updatedAt
 }
 
 
@@ -122,7 +143,7 @@ model Chore {
   notes           String?
   priority        String    @default("AUTO") // "AUTO", "LOW", "MEDIUM", "HIGH"
   dueDate         DateTime  @default(now())
-  createdById     String?
+ createdById     String?
   createdBy       User?     @relation("ChoreCreator", fields: [createdById], references: [id], onDelete: SetNull)
   assignedToId    String
   assignedTo      User      @relation("ChoreAssignee", fields: [assignedToId], references: [id])

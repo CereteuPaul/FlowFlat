@@ -32,6 +32,7 @@ import {
   RefreshCw,
   PieChart as PieIcon,
   CheckCheck,
+  ChevronDown,
 } from 'lucide-react';
 
 interface Member {
@@ -48,13 +49,37 @@ interface Household {
   users?: Member[];
 }
 
+interface HouseholdMembership {
+  id: string;
+  role: string;
+  household: {
+    id: string;
+    name: string;
+    inviteCode: string;
+  };
+}
+
 interface User {
   id: string;
   name: string;
   email: string;
   role: string;
-  householdId: string | null;
-  household?: Household | null;
+  avatarColor: string;
+  status: string;
+  householdId?: string | null;
+  activeHouseholdId?: string | null;
+  activeHousehold?: {
+    id: string;
+    name: string;
+    inviteCode: string;
+  } | null;
+  household?: {
+    id: string;
+    name: string;
+    inviteCode: string;
+    users: any[];
+  } | null;
+  memberships?: HouseholdMembership[]; // <-- Add this
 }
 
 interface JoinRequest {
@@ -72,6 +97,12 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Leave Household Modal States
+  const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
+  const [successorId, setSuccessorId] = useState('');
+
+  const [showHouseholdMenu, setShowHouseholdMenu] = useState(false);
 
   // Top header tab controller
   const [activeTab, setActiveTab] = useState<
@@ -156,6 +187,13 @@ export default function App() {
   const [newAmount, setNewAmount] = useState('');
   const [newWasteDay, setNewWasteDay] = useState(1);
   const [newWasteColor, setNewWasteColor] = useState('#EAB308');
+
+  const [isJoinOrCreateModalOpen, setIsJoinOrCreateModalOpen] = useState(false);
+  const [newHouseholdMode, setNewHouseholdMode] = useState<'create' | 'join'>(
+    'create'
+  );
+  const [extraHouseholdName, setExtraHouseholdName] = useState('');
+  const [extraInviteCode, setExtraInviteCode] = useState('');
 
   // Auth & Onboarding States
   const [isRegister, setIsRegister] = useState(false);
@@ -321,19 +359,26 @@ export default function App() {
       setCurrentUser(data.user);
 
       if (!data.user.householdId) {
+        // Still no household assigned — check if a join request is waiting
         const reqData = await apiFetch('/households/my-request');
         if (reqData.pendingRequest) {
           setPendingApproval(reqData.pendingRequest.household.name);
+        } else {
+          setPendingApproval(null);
         }
       } else {
+        // User has been approved and belongs to a household!
+        setPendingApproval(null); // <-- Resets the pending screen
+
         if (data.user.role === 'HOUSEHOLD_ADMIN') {
-          loadPendingRequests();
+          await loadPendingRequests();
         }
         await loadDashboardSummary();
       }
     } catch {
       clearToken();
       setCurrentUser(null);
+      setPendingApproval(null);
     } finally {
       setLoading(false);
     }
@@ -430,6 +475,83 @@ export default function App() {
     }
   }
 
+  async function handleRemoveMember(targetUserId: string, targetName: string) {
+    if (
+      !window.confirm(
+        `Are you sure you want to remove ${targetName} from the flat?`
+      )
+    )
+      return;
+    try {
+      const res = await apiFetch(`/households/members/${targetUserId}`, {
+        method: 'DELETE',
+      });
+      alert(res.message);
+      await loadProfile();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  }
+
+  async function handleJoinOrCreateExtraHousehold(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      if (newHouseholdMode === 'create') {
+        await apiFetch('/households/create', {
+          method: 'POST',
+          body: JSON.stringify({ name: extraHouseholdName }),
+        });
+      } else {
+        await apiFetch('/households/join', {
+          method: 'POST',
+          body: JSON.stringify({ inviteCode: extraInviteCode }),
+        });
+      }
+      setIsJoinOrCreateModalOpen(false);
+      setExtraHouseholdName('');
+      setExtraInviteCode('');
+      await loadProfile();
+    } catch (err: any) {
+      alert(err.message || 'Action failed.');
+    }
+  }
+
+  async function handleLeaveHousehold() {
+    const otherMembers = (currentUser?.household?.users || []).filter(
+      (u) => u.id !== currentUser?.id
+    );
+    const needsSuccessor =
+      currentUser?.role === 'HOUSEHOLD_ADMIN' && otherMembers.length > 0;
+
+    if (needsSuccessor && !successorId) {
+      alert(
+        'Please select a successor to become the new Flat Admin before leaving.'
+      );
+      return;
+    }
+
+    if (
+      !window.confirm(
+        'Are you sure you want to leave this household? You will need an invite code to rejoin.'
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await apiFetch('/households/leave', {
+        method: 'POST',
+        body: JSON.stringify({ successorUserId: successorId || undefined }),
+      });
+      setIsLeaveModalOpen(false);
+      setSuccessorId('');
+      // Reload profile: currentUser.householdId becomes null, presenting the onboarding screen
+      await loadProfile();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  }
+
   async function handleToggleChecklistItem(noteId: string, itemId: string) {
     try {
       await apiFetch(`/dashboard/notes/${noteId}/toggle-item`, {
@@ -505,6 +627,20 @@ export default function App() {
       setPendingRequests(data.requests || []);
     } catch (err) {
       console.error(err);
+    }
+  }
+
+  async function handleSwitchHousehold(householdId: string) {
+    try {
+      await apiFetch('/households/switch-active', {
+        method: 'PATCH',
+        body: JSON.stringify({ householdId }),
+      });
+      setShowHouseholdMenu(false);
+      await loadProfile();
+      await loadDashboardSummary();
+    } catch (err: any) {
+      alert(err.message || 'Failed to switch household.');
     }
   }
 
@@ -1086,9 +1222,58 @@ export default function App() {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-bold text-white text-sm tracking-tight">
+              {/* <span className="font-bold text-white text-sm tracking-tight">
                 {currentUser.household?.name}
-              </span>
+              </span> */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowHouseholdMenu(!showHouseholdMenu)}
+                  className="flex items-center gap-2 bg-[#131A27] px-3.5 py-2 rounded-2xl border border-slate-800 hover:border-slate-700 transition"
+                >
+                  <Home className="w-4 h-4 text-cyan-400" />
+                  <span className="text-sm font-bold text-white">
+                    {currentUser?.household?.name ||
+                      currentUser?.activeHousehold?.name ||
+                      'My Household'}
+                  </span>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+
+                {showHouseholdMenu && (
+                  <div className="absolute left-0 mt-2 w-56 bg-[#0F141E] border border-slate-800 rounded-2xl shadow-2xl p-2 z-50">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase px-3 py-1 block">
+                      My Households
+                    </span>
+
+                    {currentUser?.memberships?.map((m) => (
+                      <button
+                        key={m.household.id}
+                        onClick={() => handleSwitchHousehold(m.household.id)}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition ${
+                          m.household.id === currentUser.activeHouseholdId
+                            ? 'bg-cyan-500/10 text-cyan-400 font-bold'
+                            : 'text-slate-300 hover:bg-[#161F30]'
+                        }`}
+                      >
+                        <span>{m.household.name}</span>
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          {m.role === 'HOUSEHOLD_ADMIN' ? 'Admin' : 'Member'}
+                        </span>
+                      </button>
+                    ))}
+
+                    <div className="border-t border-slate-800 mt-2 pt-2">
+                      <button
+                        onClick={() => setIsJoinOrCreateModalOpen(true)}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-cyan-400 hover:bg-cyan-500/10 rounded-xl font-medium transition"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Join / Create Another Flat</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
               <span className="font-mono text-[11px] px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
                 {currentUser.household?.inviteCode}
               </span>
@@ -1157,6 +1342,31 @@ export default function App() {
         {/* ==================== VIEW 1: OVERVIEW (READ-ONLY OBSERVATIONAL SUMMARY) ==================== */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
+            {/* Quick alert if requests are pending */}
+            {isAdmin && pendingRequests.length > 0 && (
+              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <UserPlus className="w-5 h-5 text-amber-400" />
+                  <div>
+                    <p className="text-xs font-bold text-white">
+                      {pendingRequests.length} Roommate{' '}
+                      {pendingRequests.length === 1 ? 'Request' : 'Requests'}{' '}
+                      Pending
+                    </p>
+                    <p className="text-[11px] text-slate-400">
+                      Approve or decline prospective flatmates.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('members')}
+                  className="px-3 py-1.5 bg-amber-400 text-slate-950 font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer"
+                >
+                  Review Requests
+                </button>
+              </div>
+            )}
             {/* Top Readiness, Donut Chart, and Next Collection Snapshot */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
               {/* Card 1: Readiness & Progress */}
@@ -2751,29 +2961,120 @@ export default function App() {
 
         {/* ==================== VIEW 5: MEMBERS & ACCESS ==================== */}
         {activeTab === 'members' && (
-          <div className="space-y-5">
-            <div className="flex items-center justify-between">
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h2 className="text-2xl font-black text-white tracking-tight">
                   Household Flatmates
                 </h2>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Manage permissions, invite codes, and roles.
+                  Manage permissions, invite codes, roles, and occupancy.
                 </p>
               </div>
-              <span className="text-xs font-mono text-cyan-400 px-3 py-1.5 rounded-2xl bg-cyan-500/10 border border-cyan-500/20">
-                Invite Code:{' '}
-                <span className="font-bold">
-                  {currentUser.household?.inviteCode}
+
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-mono text-cyan-400 px-3 py-1.5 rounded-2xl bg-cyan-500/10 border border-cyan-500/20">
+                  Invite Code:{' '}
+                  <span className="font-bold">
+                    {currentUser.household?.inviteCode}
+                  </span>
                 </span>
-              </span>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const others = (currentUser.household?.users || []).filter(
+                      (u) => u.id !== currentUser.id
+                    );
+                    if (others.length > 0) setSuccessorId(others[0].id);
+                    setIsLeaveModalOpen(true);
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold transition cursor-pointer"
+                >
+                  Leave Flat
+                </button>
+              </div>
             </div>
 
+            {/* PENDING JOIN REQUESTS (ADMIN REVIEW SECTION) */}
+            {isAdmin && pendingRequests.length > 0 && (
+              <div className="p-5 rounded-3xl bg-amber-500/10 border border-amber-500/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-amber-400">
+                    <UserPlus className="w-5 h-5" />
+                    <h3 className="text-sm font-bold">
+                      Pending Join Requests ({pendingRequests.length})
+                    </h3>
+                  </div>
+                  <span className="text-[10px] text-amber-300 font-mono">
+                    Action Required
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  {pendingRequests.map((req) => (
+                    <div
+                      key={req.id}
+                      className="p-3.5 rounded-2xl bg-[#0F141E] border border-amber-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    >
+                      <div>
+                        <p className="text-xs font-bold text-white">
+                          {req.user.name}
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          {req.user.email}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {/* Role selection upon approval */}
+                        <select
+                          value={selectedRoles[req.id] || 'MEMBER'}
+                          onChange={(e) =>
+                            setSelectedRoles({
+                              ...selectedRoles,
+                              [req.id]: e.target.value,
+                            })
+                          }
+                          className="bg-[#070A0F] border border-slate-700 text-[11px] text-slate-200 rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-cyan-400"
+                        >
+                          <option value="MEMBER">Standard Member</option>
+                          <option value="RESTRICTED_MEMBER">
+                            Restricted Member
+                          </option>
+                          <option value="HOUSEHOLD_ADMIN">Admin</option>
+                        </select>
+
+                        <button
+                          type="button"
+                          onClick={() => handleReviewRequest(req.id, 'APPROVE')}
+                          className="flex items-center gap-1 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs rounded-xl transition cursor-pointer"
+                        >
+                          <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                          <span>Approve</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleReviewRequest(req.id, 'REJECT')}
+                          className="flex items-center gap-1 px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 border border-rose-500/30 font-bold text-xs rounded-xl transition cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5 stroke-[2.5]" />
+                          <span>Decline</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* MEMBERS GRID */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {currentUser.household?.users?.map((member) => (
                 <div
                   key={member.id}
-                  className="bg-[#0F141E] border border-slate-800/80 p-5 rounded-3xl flex items-center justify-between"
+                  className="bg-[#0F141E] border border-slate-800/80 p-5 rounded-3xl flex items-center justify-between hover:border-slate-700/80 transition"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-11 h-11 rounded-2xl bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 font-bold text-sm flex items-center justify-center">
@@ -2790,25 +3091,38 @@ export default function App() {
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-slate-400 truncate max-w-[120px]">
+                      <p className="text-[11px] text-slate-400 truncate max-w-[130px]">
                         {member.email}
                       </p>
                     </div>
                   </div>
 
-                  <div>
+                  <div className="flex items-center gap-2">
                     {isAdmin && member.id !== currentUser.id ? (
-                      <select
-                        value={member.role}
-                        onChange={(e) =>
-                          handleChangeRole(member.id, e.target.value)
-                        }
-                        className="bg-[#070A0F] border border-slate-800 text-[11px] text-slate-200 rounded-xl px-2 py-1 focus:outline-none focus:border-cyan-400 cursor-pointer"
-                      >
-                        <option value="MEMBER">Member</option>
-                        <option value="RESTRICTED_MEMBER">Restricted</option>
-                        <option value="HOUSEHOLD_ADMIN">Admin</option>
-                      </select>
+                      <>
+                        <select
+                          value={member.role}
+                          onChange={(e) =>
+                            handleChangeRole(member.id, e.target.value)
+                          }
+                          className="bg-[#070A0F] border border-slate-800 text-[11px] text-slate-200 rounded-xl px-2 py-1 focus:outline-none focus:border-cyan-400 cursor-pointer"
+                        >
+                          <option value="MEMBER">Member</option>
+                          <option value="RESTRICTED_MEMBER">Restricted</option>
+                          <option value="HOUSEHOLD_ADMIN">Admin</option>
+                        </select>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleRemoveMember(member.id, member.name)
+                          }
+                          title={`Remove ${member.name} from flat`}
+                          className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
                     ) : (
                       <span
                         className={`text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider ${
@@ -2833,6 +3147,84 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* 6. LEAVE HOUSEHOLD MODAL */}
+      {isLeaveModalOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0F141E] border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-4">
+              <h3 className="text-base font-bold text-white">
+                Leave Household
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsLeaveModalOpen(false)}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Are you sure you want to leave{' '}
+                <span className="font-bold text-white">
+                  {currentUser.household?.name}
+                </span>
+                ? You will lose direct access to chores, bins, and ledger items
+                until you join or create a new household.
+              </p>
+
+              {/* Successor selector if the leaving user is Flat Admin and other members remain */}
+              {currentUser.role === 'HOUSEHOLD_ADMIN' &&
+                (currentUser.household?.users || []).filter(
+                  (u) => u.id !== currentUser.id
+                ).length > 0 && (
+                  <div className="p-3.5 bg-[#070A0F] border border-amber-500/30 rounded-2xl space-y-2">
+                    <p className="text-xs font-semibold text-amber-400">
+                      Transfer Flat Administration:
+                    </p>
+                    <p className="text-[11px] text-slate-400">
+                      As the Flat Admin, you must appoint another flatmate to
+                      inherit admin privileges before departing.
+                    </p>
+
+                    <select
+                      value={successorId}
+                      onChange={(e) => setSuccessorId(e.target.value)}
+                      className="w-full bg-[#131A27] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 cursor-pointer"
+                    >
+                      {(currentUser.household?.users || [])
+                        .filter((u) => u.id !== currentUser.id)
+                        .map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.name} ({u.email})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                )}
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsLeaveModalOpen(false)}
+                  className="flex-1 py-2.5 bg-[#172030] hover:bg-[#1E293D] text-slate-300 font-semibold rounded-xl text-xs transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLeaveHousehold}
+                  className="flex-1 py-2.5 bg-rose-500 hover:bg-rose-600 text-white font-bold rounded-xl text-xs transition cursor-pointer shadow-lg shadow-rose-500/10"
+                >
+                  Confirm & Leave
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 4. HOME INFO CREATION MODAL (ADMIN ONLY) */}
       {isHomeInfoModalOpen && (
@@ -3382,6 +3774,98 @@ export default function App() {
                 className="w-full py-2.5 bg-gradient-to-r from-cyan-400 to-teal-400 hover:opacity-95 text-slate-950 font-bold rounded-xl text-xs transition cursor-pointer shadow-lg shadow-cyan-500/10 mt-3"
               >
                 Create Note / List
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 7. JOIN OR CREATE ANOTHER HOUSEHOLD MODAL */}
+      {isJoinOrCreateModalOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0F141E] border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-4">
+              <h3 className="text-base font-bold text-white">
+                Add Another Household
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsJoinOrCreateModalOpen(false)}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex gap-2 mb-4 bg-[#070A0F] p-1 rounded-xl border border-slate-800">
+              <button
+                type="button"
+                onClick={() => setNewHouseholdMode('create')}
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer ${
+                  newHouseholdMode === 'create'
+                    ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Create New Flat
+              </button>
+              <button
+                type="button"
+                onClick={() => setNewHouseholdMode('join')}
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer ${
+                  newHouseholdMode === 'join'
+                    ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Join with Code
+              </button>
+            </div>
+
+            <form
+              onSubmit={handleJoinOrCreateExtraHousehold}
+              className="space-y-4"
+            >
+              {newHouseholdMode === 'create' ? (
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Household Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={extraHouseholdName}
+                    onChange={(e) => setExtraHouseholdName(e.target.value)}
+                    placeholder="e.g. Parents Home or Cluj Flat"
+                    className="w-full bg-[#070A0F] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Invite Code
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    value={extraInviteCode}
+                    onChange={(e) =>
+                      setExtraInviteCode(e.target.value.toUpperCase())
+                    }
+                    placeholder="e.g. A9B2X7"
+                    className="w-full bg-[#070A0F] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white uppercase tracking-wider font-mono placeholder-slate-500 focus:outline-none focus:border-cyan-400 text-center"
+                  />
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full py-2.5 bg-gradient-to-r from-cyan-400 to-teal-400 hover:opacity-95 text-slate-950 font-bold rounded-xl text-xs transition cursor-pointer shadow-lg shadow-cyan-500/10"
+              >
+                {newHouseholdMode === 'create'
+                  ? 'Create & Switch'
+                  : 'Request to Join'}
               </button>
             </form>
           </div>

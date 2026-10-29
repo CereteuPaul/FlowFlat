@@ -8,7 +8,7 @@ import {
   generateEmailToken,
 } from "../utils/auth";
 import { authenticate } from "../middleware/auth";
-
+import { sendWelcomeEmail } from "../utils/email";
 const router = Router();
 
 // 1. REGISTER
@@ -40,14 +40,14 @@ router.post("/register", async (req: Request, res: Response) => {
     }
 
     const passwordHash = await hashPassword(password);
-    const verificationToken = generateEmailToken();
+    const emailVerificationToken = generateEmailToken();
 
     const user = await prisma.user.create({
       data: {
         name: name.trim(),
         email: email.toLowerCase().trim(),
         passwordHash,
-        verificationToken,
+        emailVerificationToken,
         isEmailVerified: false,
       },
       select: {
@@ -59,13 +59,12 @@ router.post("/register", async (req: Request, res: Response) => {
       },
     });
 
-    // In local development, log activation URL so you can activate instantly
     console.log(`\n📬 [EMAIL VERIFICATION SIMULATOR]`);
     console.log(`To activate account for ${user.email}, visit:`);
     console.log(
-      `http://localhost:4000/api/auth/verify-email?token=${verificationToken}\n`,
+      `http://localhost:4000/api/auth/verify-email?token=${emailVerificationToken}\n`,
     );
-
+    await sendWelcomeEmail(user.email, user.name);
     return res.status(201).json({
       message:
         "Account created! Please check your terminal or email to verify your account.",
@@ -88,8 +87,8 @@ router.get("/verify-email", async (req: Request, res: Response) => {
         .send("<h3>Invalid or missing verification token.</h3>");
     }
 
-    const user = await prisma.user.findUnique({
-      where: { verificationToken: token },
+    const user = await prisma.user.findFirst({
+      where: { emailVerificationToken: token },
     });
 
     if (!user) {
@@ -102,7 +101,7 @@ router.get("/verify-email", async (req: Request, res: Response) => {
       where: { id: user.id },
       data: {
         isEmailVerified: true,
-        verificationToken: null,
+        emailVerificationToken: null,
       },
     });
 
@@ -132,11 +131,40 @@ router.post("/login", async (req: Request, res: Response) => {
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase().trim() },
       include: {
-        household: {
+        activeHousehold: {
           select: {
             id: true,
             name: true,
             inviteCode: true,
+            members: {
+              select: {
+                id: true,
+                role: true,
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    avatarColor: true,
+                    status: true,
+                  },
+                },
+              },
+              orderBy: { user: { name: "asc" } },
+            },
+          },
+        },
+        memberships: {
+          select: {
+            id: true,
+            role: true,
+            household: {
+              select: {
+                id: true,
+                name: true,
+                inviteCode: true,
+              },
+            },
           },
         },
       },
@@ -158,11 +186,18 @@ router.post("/login", async (req: Request, res: Response) => {
       });
     }
 
+    const activeMembership = user.memberships.find(
+      (m) => m.household.id === user.activeHouseholdId,
+    );
+    const roleInActiveHousehold = activeMembership
+      ? activeMembership.role
+      : user.role || "MEMBER";
+
     const token = signToken({
       userId: user.id,
       email: user.email,
-      role: user.role,
-      householdId: user.householdId,
+      role: roleInActiveHousehold,
+      householdId: user.activeHouseholdId,
     });
 
     return res.json({
@@ -171,9 +206,24 @@ router.post("/login", async (req: Request, res: Response) => {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role,
-        householdId: user.householdId,
-        household: user.household,
+        avatarColor: user.avatarColor,
+        status: user.status,
+        role: roleInActiveHousehold,
+        householdId: user.activeHouseholdId,
+        activeHouseholdId: user.activeHouseholdId,
+        activeHousehold: user.activeHousehold,
+        household: user.activeHousehold
+          ? {
+              id: user.activeHousehold.id,
+              name: user.activeHousehold.name,
+              inviteCode: user.activeHousehold.inviteCode,
+              users: user.activeHousehold.members.map((m) => ({
+                ...m.user,
+                role: m.role,
+              })),
+            }
+          : null,
+        memberships: user.memberships,
       },
     });
   } catch (error) {
@@ -191,25 +241,42 @@ router.get("/me", authenticate, async (req: Request, res: Response) => {
         id: true,
         name: true,
         email: true,
-        role: true,
         avatarColor: true,
         status: true,
-        householdId: true,
-        household: {
+        activeHouseholdId: true,
+        activeHousehold: {
           select: {
             id: true,
             name: true,
             inviteCode: true,
-            users: {
+            members: {
+              select: {
+                id: true,
+                role: true,
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    avatarColor: true,
+                    status: true,
+                  },
+                },
+              },
+              orderBy: { user: { name: "asc" } },
+            },
+          },
+        },
+        memberships: {
+          select: {
+            id: true,
+            role: true,
+            household: {
               select: {
                 id: true,
                 name: true,
-                email: true,
-                role: true,
-                avatarColor: true,
-                status: true,
+                inviteCode: true,
               },
-              orderBy: { name: "asc" },
             },
           },
         },
@@ -220,7 +287,31 @@ router.get("/me", authenticate, async (req: Request, res: Response) => {
       return res.status(404).json({ error: "User not found." });
     }
 
-    return res.json({ user });
+    const activeMembership = user.memberships.find(
+      (m) => m.household.id === user.activeHouseholdId,
+    );
+    const roleInActiveHousehold = activeMembership
+      ? activeMembership.role
+      : "MEMBER";
+
+    const formattedUser = {
+      ...user,
+      role: roleInActiveHousehold,
+      householdId: user.activeHouseholdId,
+      household: user.activeHousehold
+        ? {
+            id: user.activeHousehold.id,
+            name: user.activeHousehold.name,
+            inviteCode: user.activeHousehold.inviteCode,
+            users: user.activeHousehold.members.map((m) => ({
+              ...m.user,
+              role: m.role,
+            })),
+          }
+        : null,
+    };
+
+    return res.json({ user: formattedUser });
   } catch (error) {
     console.error("[Get Me Error]", error);
     return res.status(500).json({ error: "Failed to retrieve profile." });

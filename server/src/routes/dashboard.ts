@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { prisma, io } from "../index";
 import { authenticate } from "../middleware/auth";
+import { sendBillReminderEmail } from "../utils/email";
 
 const router = Router();
 router.use(authenticate);
@@ -377,7 +378,6 @@ router.post("/chores", async (req: Request, res: Response) => {
 });
 
 // DELETE CHORE
-// DELETE CHORE
 router.delete("/chores/:id", async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
@@ -390,7 +390,6 @@ router.delete("/chores/:id", async (req: Request, res: Response) => {
 });
 
 // 3. TOGGLE CHORE COMPLETION
-// TOGGLE CHORE COMPLETION
 router.patch("/chores/:id/toggle", async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
@@ -485,9 +484,16 @@ router.post("/bills", async (req: Request, res: Response) => {
     const callerId = req.user!.userId;
     const caller = await prisma.user.findUnique({
       where: { id: callerId },
-      include: { household: { include: { users: true } } },
+      include: {
+        activeHousehold: {
+          include: {
+            members: {
+              include: { user: true },
+            },
+          },
+        },
+      },
     });
-
     if (!title || !amount || !caller?.householdId) {
       return res
         .status(400)
@@ -505,7 +511,7 @@ router.post("/bills", async (req: Request, res: Response) => {
     const validUserIds: string[] =
       Array.isArray(selectedUserIds) && selectedUserIds.length > 0
         ? selectedUserIds
-        : caller.household?.users.map((u) => u.id) || [callerId];
+        : caller?.activeHousehold?.members.map((m) => m.userId) || [callerId];
 
     const splitAmount = parseFloat(
       (totalAmount / validUserIds.length).toFixed(2),
@@ -543,97 +549,6 @@ router.post("/bills", async (req: Request, res: Response) => {
       },
     });
 
-    // SEND REMINDER FOR UNPAID SPLITS
-    router.post("/bills/:id/remind", async (req: Request, res: Response) => {
-      try {
-        const id = req.params.id as string;
-        const bill = await prisma.bill.findUnique({
-          where: { id },
-          include: {
-            paidBy: { select: { id: true, name: true } },
-            splits: { where: { isPaid: false }, include: { user: true } },
-          },
-        });
-
-        if (!bill) return res.status(404).json({ error: "Bill not found." });
-
-        const unpaidCount = bill.splits.length;
-        if (unpaidCount === 0) {
-          return res
-            .status(400)
-            .json({ error: "All splits are already marked paid." });
-        }
-
-        const updated = await prisma.bill.update({
-          where: { id },
-          data: { lastRemindedAt: new Date() },
-        });
-
-        // Emit live alert to the household channel
-        io.to(bill.householdId).emit("bill_reminder", {
-          billTitle: bill.title,
-          sender: bill.paidBy.name,
-          unpaidMembers: bill.splits.map((s) => s.user.name),
-        });
-
-        return res.json({
-          message: `Reminder sent to ${unpaidCount} roommate(s).`,
-          bill: updated,
-        });
-      } catch (error) {
-        return res.status(500).json({ error: "Failed to send reminder." });
-      }
-    });
-
-    // TOGGLE SPLIT PAYMENT STATUS
-    router.patch(
-      "/bills/splits/:splitId/toggle",
-      async (req: Request, res: Response) => {
-        try {
-          const splitId = req.params.splitId as string;
-          const split = await prisma.billSplit.findUnique({
-            where: { id: splitId },
-            include: { bill: { include: { splits: true } } },
-          });
-
-          if (!split)
-            return res.status(404).json({ error: "Split record not found." });
-
-          const updatedSplit = await prisma.billSplit.update({
-            where: { id: splitId },
-            data: { isPaid: !split.isPaid },
-          });
-
-          // Recheck if all splits on the parent bill are now settled
-          const allSplits = await prisma.billSplit.findMany({
-            where: { billId: split.billId },
-          });
-          const allPaid = allSplits.every((s) => s.isPaid);
-
-          await prisma.bill.update({
-            where: { id: split.billId },
-            data: { isSettled: allPaid },
-          });
-
-          io.to(split.bill.householdId).emit("data_updated");
-          return res.json({ split: updatedSplit });
-        } catch (error) {
-          return res.status(500).json({ error: "Failed to toggle split." });
-        }
-      },
-    );
-
-    // DELETE BILL
-    router.delete("/bills/:id", async (req: Request, res: Response) => {
-      try {
-        const id = req.params.id as string;
-        await prisma.bill.delete({ where: { id } });
-        return res.json({ message: "Bill removed." });
-      } catch (error) {
-        return res.status(500).json({ error: "Failed to delete bill." });
-      }
-    });
-
     // Check if fully settled immediately
     const allPaid = bill.splits.every((s) => s.isPaid);
     if (allPaid) {
@@ -648,6 +563,111 @@ router.post("/bills", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("[Create Bill Error]", error);
     return res.status(500).json({ error: "Failed to create bill." });
+  }
+});
+
+// SEND REMINDER FOR UNPAID SPLITS
+router.post("/bills/:id/remind", async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const bill = await prisma.bill.findUnique({
+      where: { id },
+      include: {
+        paidBy: { select: { id: true, name: true } },
+        splits: { where: { isPaid: false }, include: { user: true } },
+      },
+    });
+
+    if (!bill) return res.status(404).json({ error: "Bill not found." });
+
+    const unpaidCount = bill.splits.length;
+    if (unpaidCount === 0) {
+      return res
+        .status(400)
+        .json({ error: "All splits are already marked paid." });
+    }
+
+    const updated = await prisma.bill.update({
+      where: { id },
+      data: { lastRemindedAt: new Date() },
+    });
+
+    // Send email reminders to unpaid members
+    for (const split of bill.splits) {
+      if (split.user.email) {
+        await sendBillReminderEmail(
+          split.user.email,
+          split.user.name,
+          bill.title,
+          split.amountOwed,
+          new Date(bill.dueDate).toLocaleDateString(),
+        );
+      }
+    }
+
+    // Emit live alert to the household channel
+    io.to(bill.householdId).emit("bill_reminder", {
+      billTitle: bill.title,
+      sender: bill.paidBy.name,
+      unpaidMembers: bill.splits.map((s) => s.user.name),
+    });
+
+    return res.json({
+      message: `Reminder sent to ${unpaidCount} roommate(s).`,
+      bill: updated,
+    });
+  } catch (error) {
+    console.error("[Bill Reminder Error]", error);
+    return res.status(500).json({ error: "Failed to send reminder." });
+  }
+});
+
+// TOGGLE SPLIT PAYMENT STATUS
+router.patch(
+  "/bills/splits/:splitId/toggle",
+  async (req: Request, res: Response) => {
+    try {
+      const splitId = req.params.splitId as string;
+      const split = await prisma.billSplit.findUnique({
+        where: { id: splitId },
+        include: { bill: { include: { splits: true } } },
+      });
+
+      if (!split)
+        return res.status(404).json({ error: "Split record not found." });
+
+      const updatedSplit = await prisma.billSplit.update({
+        where: { id: splitId },
+        data: { isPaid: !split.isPaid },
+      });
+
+      // Recheck if all splits on the parent bill are now settled
+      const allSplits = await prisma.billSplit.findMany({
+        where: { billId: split.billId },
+      });
+      const allPaid = allSplits.every((s) => s.isPaid);
+
+      await prisma.bill.update({
+        where: { id: split.billId },
+        data: { isSettled: allPaid },
+      });
+
+      io.to(split.bill.householdId).emit("data_updated");
+      return res.json({ split: updatedSplit });
+    } catch (error) {
+      return res.status(500).json({ error: "Failed to toggle split." });
+    }
+  },
+);
+
+// DELETE BILL
+router.delete("/bills/:id", async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    await prisma.bill.delete({ where: { id } });
+    return res.json({ message: "Bill removed." });
+  } catch (error) {
+    return res.status(500).json({ error: "Failed to delete bill." });
   }
 });
 
