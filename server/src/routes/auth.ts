@@ -91,10 +91,33 @@ router.get("/verify-email", async (req: Request, res: Response) => {
       where: { emailVerificationToken: token },
     });
 
+    const clientUrl = (process.env.CLIENT_URL || "http://localhost:5173").replace(/\/+$/, "");
+
     if (!user) {
-      return res
-        .status(404)
-        .send("<h3>Verification token not found or already used.</h3>");
+      return res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Account Active - FlowFlat</title>
+          <meta http-equiv="refresh" content="3;url=${clientUrl}/?verified=true">
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #070A0F; color: #F1F5F9; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+            .card { background: #0F141E; border: 1px solid #1E293B; border-radius: 16px; padding: 40px; text-align: center; max-width: 440px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+            h2 { color: #38BDF8; margin: 0 0 10px 0; font-size: 22px; }
+            p { color: #94A3B8; font-size: 15px; margin: 0 0 24px 0; line-height: 1.5; }
+            .btn { display: inline-block; background: #0284C7; color: #FFFFFF; font-weight: 600; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <h2>Account Already Active!</h2>
+            <p>This verification link has already been confirmed. Your account is ready.</p>
+            <a href="${clientUrl}/?verified=true" class="btn">Proceed to Login</a>
+          </div>
+        </body>
+        </html>
+      `);
     }
 
     await prisma.user.update({
@@ -105,14 +128,29 @@ router.get("/verify-email", async (req: Request, res: Response) => {
       },
     });
 
-    const clientUrl = process.env.CLIENT_URL || "http://localhost:5173";
     return res.send(`
-      <div style="font-family: sans-serif; text-align: center; margin-top: 50px;">
-        <h2 style="color: #10B981;">Email verified successfully!</h2>
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Email Verified - FlowFlat</title>
         <meta http-equiv="refresh" content="3;url=${clientUrl}/?verified=true">
-        <p>Your account has been activated! Redirecting you to FlowFlat...</p>
-        <p><a href="${clientUrl}/?verified=true" style="display:inline-block;padding:10px 20px;background:#0284c7;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;margin-top:10px;">Return to FlowFlat</a></p>
-      </div>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #070A0F; color: #F1F5F9; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+          .card { background: #0F141E; border: 1px solid #1E293B; border-radius: 16px; padding: 40px; text-align: center; max-width: 440px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+          h2 { color: #10B981; margin: 0 0 10px 0; font-size: 22px; }
+          p { color: #94A3B8; font-size: 15px; margin: 0 0 24px 0; line-height: 1.5; }
+          .btn { display: inline-block; background: #0284C7; color: #FFFFFF; font-weight: 600; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <h2>Email Verified Successfully!</h2>
+          <p>Your account is now activated. Redirecting you to FlowFlat...</p>
+          <a href="${clientUrl}/?verified=true" class="btn">Return to Login</a>
+        </div>
+      </body>
+      </html>
     `);
   } catch (error) {
     console.error("[Verify Email Error]", error);
