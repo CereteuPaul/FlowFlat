@@ -98,7 +98,11 @@ export async function sendWelcomeEmail(
   userName: string,
   verificationToken: string,
 ) {
-  const serverUrl = process.env.SERVER_URL || "http://localhost:4000";
+  const rawServerUrl =
+    process.env.RENDER_EXTERNAL_URL ||
+    process.env.SERVER_URL ||
+    "https://flowflat.onrender.com";
+  const serverUrl = rawServerUrl.replace(/\/api\/?$/, "").replace(/\/+$/, "");
   const verificationUrl = `${serverUrl}/api/auth/verify-email?token=${verificationToken}`;
 
   const html = `
