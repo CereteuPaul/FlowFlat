@@ -213,6 +213,13 @@ export default function App() {
   );
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('verified') === 'true') {
+      setAuthSuccess('Email verified successfully! You can now log in.');
+      setIsRegister(false);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
     const token = getToken();
     if (!token) {
       setLoading(false);

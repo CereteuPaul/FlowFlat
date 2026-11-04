@@ -64,7 +64,7 @@ router.post("/register", async (req: Request, res: Response) => {
     console.log(
       `http://localhost:4000/api/auth/verify-email?token=${emailVerificationToken}\n`,
     );
-    await sendWelcomeEmail(user.email, user.name);
+    await sendWelcomeEmail(user.email, user.name, emailVerificationToken);
     return res.status(201).json({
       message:
         "Account created! Please check your terminal or email to verify your account.",
@@ -105,10 +105,13 @@ router.get("/verify-email", async (req: Request, res: Response) => {
       },
     });
 
+    const clientUrl = process.env.CLIENT_URL || "http://localhost:5173";
     return res.send(`
       <div style="font-family: sans-serif; text-align: center; margin-top: 50px;">
         <h2 style="color: #10B981;">Email verified successfully!</h2>
-        <p>You can now return to FlowFlat and log in.</p>
+        <meta http-equiv="refresh" content="3;url=${clientUrl}/?verified=true">
+        <p>Your account has been activated! Redirecting you to FlowFlat...</p>
+        <p><a href="${clientUrl}/?verified=true" style="display:inline-block;padding:10px 20px;background:#0284c7;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;margin-top:10px;">Return to FlowFlat</a></p>
       </div>
     `);
   } catch (error) {
