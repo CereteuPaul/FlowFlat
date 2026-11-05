@@ -1285,28 +1285,41 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#070A0F] text-slate-100 flex flex-col p-4 md:p-8 gap-6 font-sans selection:bg-cyan-500/30 max-w-7xl mx-auto w-full">
       {/* 1. TOP HEADER WITH CENTRAL TABS & LOGOUT */}
-      <header className="bg-[#0F141E] border border-slate-800/80 rounded-3xl px-4 py-3 md:px-6 md:py-4 flex items-center justify-between shadow-2xl">
-        <div className="flex items-center gap-3 md:hidden">
+      <header className="bg-[#0F141E] border border-slate-800/80 rounded-3xl px-4 py-3 min-[1440px]:px-6 min-[1440px]:py-4 flex items-center justify-between shadow-2xl">
+        <button
+          type="button"
+          aria-label="Go to overview"
+          onClick={() => {
+            setActiveTab('overview');
+            setIsMobileMenuOpen(false);
+          }}
+          className="flex items-center gap-3 min-[1440px]:hidden"
+        >
           <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-cyan-500 to-teal-400 flex items-center justify-center text-slate-950 font-black shadow-lg shadow-cyan-500/10">
             <Home className="w-5 h-5" />
           </div>
           <span className="text-sm font-bold text-white">FlowFlat</span>
-        </div>
+        </button>
 
         <button
           type="button"
           aria-label="Open navigation menu"
           aria-expanded={isMobileMenuOpen}
           onClick={() => setIsMobileMenuOpen(true)}
-          className="md:hidden flex items-center justify-center w-10 h-10 rounded-xl border border-slate-800 bg-[#131A27] text-slate-300 hover:text-white hover:border-slate-700 transition"
+          className="min-[1440px]:hidden flex items-center justify-center w-10 h-10 rounded-xl border border-slate-800 bg-[#131A27] text-slate-300 hover:text-white hover:border-slate-700 transition"
         >
           <Menu className="w-5 h-5" />
         </button>
 
-        <div className="hidden md:flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-cyan-500 to-teal-400 flex items-center justify-center text-slate-950 font-black shadow-lg shadow-cyan-500/10">
+        <div className="hidden min-[1440px]:flex items-center gap-3">
+          <button
+            type="button"
+            aria-label="Go to overview"
+            onClick={() => setActiveTab('overview')}
+            className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-cyan-500 to-teal-400 flex items-center justify-center text-slate-950 font-black shadow-lg shadow-cyan-500/10 hover:scale-105 transition"
+          >
             <Home className="w-5 h-5" />
-          </div>
+          </button>
           <div>
             <div className="flex items-center gap-2">
               {/* <span className="font-bold text-white text-sm tracking-tight">
@@ -1371,7 +1384,7 @@ export default function App() {
           </div>
         </div>
 
-        <nav className="hidden md:flex items-center gap-1 bg-[#131A27] p-1.5 rounded-2xl border border-slate-800/60">
+        <nav className="hidden min-[1440px]:flex items-center gap-1 bg-[#131A27] p-1.5 rounded-2xl border border-slate-800/60">
           {[
             { id: 'overview', label: 'Overview' },
             { id: 'chores', label: 'Chores' },
@@ -1395,7 +1408,7 @@ export default function App() {
           ))}
         </nav>
 
-        <div className="hidden md:flex items-center gap-4">
+        <div className="hidden min-[1440px]:flex items-center gap-4">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-400 font-bold text-xs flex items-center justify-center shadow-inner">
               {currentUser.name.charAt(0).toUpperCase()}
@@ -1428,7 +1441,7 @@ export default function App() {
       </header>
 
       {isMobileMenuOpen && (
-        <div className="md:hidden fixed inset-0 z-50">
+        <div className="min-[1440px]:hidden fixed inset-0 z-50">
           <button
             type="button"
             aria-label="Close navigation menu"
