@@ -6,10 +6,125 @@ import {
   comparePassword,
   signToken,
   generateEmailToken,
+  hashEmailToken,
 } from "../utils/auth";
 import { authenticate } from "../middleware/auth";
-import { sendWelcomeEmail } from "../utils/email";
+import {
+  sendWelcomeEmail,
+  sendPasswordResetEmail,
+} from "../utils/email";
 const router = Router();
+
+function getPasswordResetToken(): string {
+  return generateEmailToken();
+}
+
+// 1. REQUEST PASSWORD RESET
+router.post("/forgot-password", async (req: Request, res: Response) => {
+  try {
+    const email =
+      typeof req.body.email === "string" ? req.body.email.toLowerCase().trim() : "";
+
+    if (!email) {
+      return res.status(400).json({ error: "Email address is required." });
+    }
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (user) {
+      const resetToken = getPasswordResetToken();
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordResetTokenHash: hashEmailToken(resetToken),
+          passwordResetExpiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        },
+      });
+      await sendPasswordResetEmail(user.email, user.name, resetToken);
+    }
+
+    return res.json({
+      message: "If an account exists for that email, a password reset link has been sent.",
+    });
+  } catch (error) {
+    console.error("[Forgot Password Error]", error);
+    return res.status(500).json({ error: "Unable to process password reset request." });
+  }
+});
+
+// 2. RESET PASSWORD WITH ONE-TIME TOKEN
+router.post("/reset-password", async (req: Request, res: Response) => {
+  try {
+    const { token, password, confirmPassword } = req.body;
+    if (!token || !password || !confirmPassword) {
+      return res.status(400).json({ error: "Token, password, and confirmation are required." });
+    }
+    if (password !== confirmPassword) {
+      return res.status(400).json({ error: "Passwords do not match." });
+    }
+
+    const validation = validatePassword(password);
+    if (!validation.isValid) {
+      return res.status(400).json({ error: validation.message });
+    }
+
+    const user = await prisma.user.findFirst({
+      where: {
+        passwordResetTokenHash: hashEmailToken(token),
+        passwordResetExpiresAt: { gt: new Date() },
+      },
+    });
+    if (!user) {
+      return res.status(400).json({ error: "This password reset link is invalid or expired." });
+    }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: await hashPassword(password),
+        passwordResetTokenHash: null,
+        passwordResetExpiresAt: null,
+      },
+    });
+    return res.json({ message: "Password reset successfully. You can now sign in." });
+  } catch (error) {
+    console.error("[Reset Password Error]", error);
+    return res.status(500).json({ error: "Unable to reset password." });
+  }
+});
+
+// 3. CHANGE PASSWORD FOR AUTHENTICATED USER
+router.post("/change-password", authenticate, async (req: Request, res: Response) => {
+  try {
+    const { currentPassword, password, confirmPassword } = req.body;
+    if (!currentPassword || !password || !confirmPassword) {
+      return res.status(400).json({ error: "All password fields are required." });
+    }
+    if (password !== confirmPassword) {
+      return res.status(400).json({ error: "Passwords do not match." });
+    }
+
+    const validation = validatePassword(password);
+    if (!validation.isValid) {
+      return res.status(400).json({ error: validation.message });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.userId },
+    });
+    if (!user || !(await comparePassword(currentPassword, user.passwordHash))) {
+      return res.status(400).json({ error: "Current password is incorrect." });
+    }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: await hashPassword(password) },
+    });
+    return res.json({ message: "Password changed successfully." });
+  } catch (error) {
+    console.error("[Change Password Error]", error);
+    return res.status(500).json({ error: "Unable to change password." });
+  }
+});
 
 // 1. REGISTER
 router.post("/register", async (req: Request, res: Response) => {

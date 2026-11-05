@@ -179,6 +179,32 @@ export async function sendScheduleReminderEmail(
   });
 }
 
+export async function sendPasswordResetEmail(
+  toEmail: string,
+  userName: string,
+  resetToken: string,
+) {
+  const clientUrl = (
+    process.env.CLIENT_URL || "http://localhost:5173"
+  ).replace(/\/+$/, "");
+  const resetUrl = `${clientUrl}/?resetToken=${encodeURIComponent(resetToken)}`;
+
+  return dispatchEmail({
+    toEmail,
+    toName: userName,
+    subject: "Reset your FlowFlat password",
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto">
+        <h2>Reset your FlowFlat password</h2>
+        <p>Hi ${userName},</p>
+        <p>Click the button below to choose a new password. This link expires in one hour.</p>
+        <p><a href="${resetUrl}" style="display:inline-block;background:#0284C7;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:bold">Reset password</a></p>
+        <p>If you did not request this, you can safely ignore this email.</p>
+      </div>
+    `,
+  });
+}
+
 // 2. Bill / Payment Reminder Email
 export async function sendBillReminderEmail(
   toEmail: string,

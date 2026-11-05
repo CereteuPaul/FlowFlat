@@ -277,6 +277,21 @@ export default function App() {
   const [authSuccess, setAuthSuccess] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [passwordResetToken, setPasswordResetToken] = useState<string | null>(
+    null
+  );
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetConfirmPassword, setResetConfirmPassword] = useState('');
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [showResetConfirmPassword, setShowResetConfirmPassword] =
+    useState(false);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] =
+    useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newConfirmPassword, setNewConfirmPassword] = useState('');
   const [householdName, setHouseholdName] = useState('');
   const [inviteCodeInput, setInviteCodeInput] = useState('');
   const [householdError, setHouseholdError] = useState('');
@@ -288,6 +303,13 @@ export default function App() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const resetToken = params.get('resetToken');
+    if (resetToken) {
+      setPasswordResetToken(resetToken);
+      setLoading(false);
+      window.history.replaceState({}, document.title, window.location.pathname);
+      return;
+    }
     if (params.get('verified') === 'true') {
       setAuthSuccess('Email verified successfully! You can now log in.');
       setIsRegister(false);
@@ -922,9 +944,70 @@ export default function App() {
         if (data.user.householdId) {
           await loadDashboardSummary();
         }
+
       }
     } catch (err: any) {
       setAuthError(err.message);
+    }
+  }
+
+  async function handleForgotPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setAuthError('');
+    setAuthSuccess('');
+    try {
+      const data = await apiFetch('/auth/forgot-password', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      });
+      setAuthSuccess(data.message);
+    } catch (err: any) {
+      setAuthError(err.message);
+    }
+  }
+
+  async function handleResetPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setAuthError('');
+    setAuthSuccess('');
+    try {
+      const data = await apiFetch('/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({
+          token: passwordResetToken,
+          password: resetPassword,
+          confirmPassword: resetConfirmPassword,
+        }),
+      });
+      setPasswordResetToken(null);
+      setResetPassword('');
+      setResetConfirmPassword('');
+      setAuthSuccess(data.message);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } catch (err: any) {
+      setAuthError(err.message);
+    }
+  }
+
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault();
+    setAuthError('');
+    try {
+      const data = await apiFetch('/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({
+          currentPassword,
+          password: newPassword,
+          confirmPassword: newConfirmPassword,
+        }),
+      });
+      setIsChangePasswordModalOpen(false);
+      setCurrentPassword('');
+      setNewPassword('');
+      setNewConfirmPassword('');
+      alert(data.message);
+    } catch (err: any) {
+      alert(err.message);
     }
   }
 
@@ -1129,6 +1212,98 @@ export default function App() {
     );
   }
 
+  if (passwordResetToken) {
+    return (
+      <div className="min-h-screen bg-[#070A0F] p-4 flex flex-col items-center justify-center font-sans">
+        <div className="max-w-md w-full bg-[#0F141E] border border-slate-800/80 rounded-3xl p-8 shadow-2xl">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-3 bg-[#131A27] rounded-2xl border border-slate-800 text-cyan-400">
+              <KeyRound className="w-6 h-6" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-white">Reset password</h1>
+              <p className="text-xs text-slate-400">
+                Choose a new FlowFlat password.
+              </p>
+            </div>
+          </div>
+
+          {authError && (
+            <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">
+              {authError}
+            </div>
+          )}
+          {authSuccess && (
+            <div className="mb-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs">
+              {authSuccess}
+            </div>
+          )}
+
+          <form onSubmit={handleResetPassword} className="space-y-4">
+            <div className="relative">
+              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                New password
+              </label>
+              <input
+                required
+                type={showResetPassword ? 'text' : 'password'}
+                value={resetPassword}
+                onChange={(e) => setResetPassword(e.target.value)}
+                placeholder="Min 8 chars, 1 uppercase, 1 symbol"
+                className="w-full bg-[#070A0F] border border-slate-800 rounded-xl px-3.5 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+              />
+              <button
+                type="button"
+                onClick={() => setShowResetPassword((value) => !value)}
+                className="absolute right-3 bottom-2.5 text-slate-500 hover:text-slate-300"
+                aria-label="Toggle new password visibility"
+              >
+                {showResetPassword ? (
+                  <EyeOff className="w-3.5 h-3.5" />
+                ) : (
+                  <Eye className="w-3.5 h-3.5" />
+                )}
+              </button>
+            </div>
+            <div className="relative">
+              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                Confirm new password
+              </label>
+              <input
+                required
+                type={showResetConfirmPassword ? 'text' : 'password'}
+                value={resetConfirmPassword}
+                onChange={(e) => setResetConfirmPassword(e.target.value)}
+                placeholder="Repeat your new password"
+                className="w-full bg-[#070A0F] border border-slate-800 rounded-xl px-3.5 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  setShowResetConfirmPassword((value) => !value)
+                }
+                className="absolute right-3 bottom-2.5 text-slate-500 hover:text-slate-300"
+                aria-label="Toggle password confirmation visibility"
+              >
+                {showResetConfirmPassword ? (
+                  <EyeOff className="w-3.5 h-3.5" />
+                ) : (
+                  <Eye className="w-3.5 h-3.5" />
+                )}
+              </button>
+            </div>
+            <button
+              type="submit"
+              className="w-full py-3 bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 font-bold rounded-xl text-xs"
+            >
+              Reset password
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-[#070A0F] p-4 flex flex-col items-center justify-center font-sans">
@@ -1151,6 +1326,7 @@ export default function App() {
             <button
               onClick={() => {
                 setIsRegister(false);
+                setIsForgotPassword(false);
                 setAuthError('');
               }}
               className={`flex-1 py-2 text-xs font-semibold rounded-xl transition ${
@@ -1164,6 +1340,7 @@ export default function App() {
             <button
               onClick={() => {
                 setIsRegister(true);
+                setIsForgotPassword(false);
                 setAuthError('');
               }}
               className={`flex-1 py-2 text-xs font-semibold rounded-xl transition ${
@@ -1189,7 +1366,8 @@ export default function App() {
             </div>
           )}
 
-          <form onSubmit={handleAuth} className="space-y-4">
+          {!isForgotPassword && (
+            <form onSubmit={handleAuth} className="space-y-4">
             {isRegister && (
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1.5">
@@ -1284,7 +1462,74 @@ export default function App() {
             >
               {isRegister ? 'Create Account' : 'Sign In'}
             </button>
-          </form>
+            </form>
+          )}
+
+          {!isRegister && !isForgotPassword && (
+            <>
+              <div className="flex items-center gap-3 my-5">
+                <div className="h-px flex-1 bg-slate-800" />
+                <span className="text-[10px] uppercase tracking-wider text-slate-500">
+                  or
+                </span>
+                <div className="h-px flex-1 bg-slate-800" />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsForgotPassword(true);
+                  setAuthError('');
+                  setAuthSuccess('');
+                }}
+                className="w-full text-xs font-semibold text-cyan-400 hover:text-cyan-300 transition"
+              >
+                Forgot your password?
+              </button>
+            </>
+          )}
+
+          {isForgotPassword && (
+            <form onSubmit={handleForgotPassword} className="space-y-4">
+              <div>
+                <h2 className="text-sm font-bold text-white mb-1">
+                  Forgot your password?
+                </h2>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Enter your account email and we will send you a secure reset link.
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                  Account email
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="alex@example.com"
+                  className="w-full bg-[#070A0F] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full py-3 bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 font-bold rounded-xl text-xs"
+              >
+                Send reset link
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsForgotPassword(false);
+                  setAuthError('');
+                  setAuthSuccess('');
+                }}
+                className="w-full text-xs text-slate-400 hover:text-white"
+              >
+                Back to sign in
+              </button>
+            </form>
+          )}
         </div>
       </div>
     );
@@ -1581,34 +1826,54 @@ export default function App() {
         </nav>
 
         <div className="hidden min-[1440px]:flex items-center gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-400 font-bold text-xs flex items-center justify-center shadow-inner">
-              {currentUser.name.charAt(0).toUpperCase()}
-            </div>
-            <div className="hidden sm:block text-left">
-              <p className="text-xs font-semibold text-white leading-tight">
-                {currentUser.name}
-              </p>
-              <p className="text-[10px] text-cyan-400 font-medium">
-                {currentUser.role === 'HOUSEHOLD_ADMIN'
-                  ? 'Flat Admin'
-                  : currentUser.role === 'RESTRICTED_MEMBER'
-                    ? 'Restricted'
-                    : 'Flatmate'}
-              </p>
-            </div>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsProfileMenuOpen((value) => !value)}
+              aria-label="Open profile menu"
+              aria-expanded={isProfileMenuOpen}
+              className="flex items-center gap-3 rounded-2xl hover:bg-[#131A27] p-1.5 transition"
+            >
+              <div className="w-9 h-9 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-400 font-bold text-xs flex items-center justify-center shadow-inner">
+                {currentUser.name.charAt(0).toUpperCase()}
+              </div>
+              <div className="hidden sm:block text-left">
+                <p className="text-xs font-semibold text-white leading-tight">
+                  {currentUser.name}
+                </p>
+                <p className="text-[10px] text-cyan-400 font-medium">
+                  {currentUser.role === 'HOUSEHOLD_ADMIN'
+                    ? 'Flat Admin'
+                    : currentUser.role === 'RESTRICTED_MEMBER'
+                      ? 'Restricted'
+                      : 'Flatmate'}
+                </p>
+              </div>
+            </button>
+            {isProfileMenuOpen && (
+              <div className="absolute right-0 top-full mt-2 w-44 bg-[#0F141E] border border-slate-800 rounded-2xl shadow-2xl p-2 z-50">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsProfileMenuOpen(false);
+                    setIsChangePasswordModalOpen(true);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-xl text-xs text-slate-300 hover:bg-[#161F30] hover:text-white"
+                >
+                  Change password
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="w-full text-left px-3 py-2 rounded-xl text-xs text-rose-400 hover:bg-rose-500/10"
+                >
+                  Log out
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="h-6 w-px bg-slate-800" />
-
-          <button
-            onClick={handleLogout}
-            title="Log Out"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-800 hover:border-rose-500/40 text-xs font-semibold text-slate-400 hover:text-rose-400 transition cursor-pointer bg-[#131A27]"
-          >
-            <LogOut className="w-4 h-4" />
-            <span className="hidden sm:inline">Log out</span>
-          </button>
         </div>
       </header>
 
@@ -1720,31 +1985,53 @@ export default function App() {
                 ))}
               </nav>
 
-              <div className="flex items-center gap-3 px-2">
-                <div className="w-9 h-9 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-400 font-bold text-xs flex items-center justify-center shadow-inner">
-                  {currentUser.name.charAt(0).toUpperCase()}
-                </div>
-                <div className="text-left">
-                  <p className="text-xs font-semibold text-white leading-tight">
-                    {currentUser.name}
-                  </p>
-                  <p className="text-[10px] text-cyan-400 font-medium">
-                    {currentUser.role === 'HOUSEHOLD_ADMIN'
-                      ? 'Flat Admin'
-                      : currentUser.role === 'RESTRICTED_MEMBER'
-                        ? 'Restricted'
-                        : 'Flatmate'}
-                  </p>
-                </div>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsProfileMenuOpen((value) => !value)}
+                  aria-label="Open profile menu"
+                  aria-expanded={isProfileMenuOpen}
+                  className="w-full flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-[#131A27] text-left"
+                >
+                  <div className="w-9 h-9 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-400 font-bold text-xs flex items-center justify-center shadow-inner">
+                    {currentUser.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-white leading-tight">
+                      {currentUser.name}
+                    </p>
+                    <p className="text-[10px] text-cyan-400 font-medium">
+                      {currentUser.role === 'HOUSEHOLD_ADMIN'
+                        ? 'Flat Admin'
+                        : currentUser.role === 'RESTRICTED_MEMBER'
+                          ? 'Restricted'
+                          : 'Flatmate'}
+                    </p>
+                  </div>
+                </button>
+                {isProfileMenuOpen && (
+                  <div className="mt-2 bg-[#131A27] border border-slate-800 rounded-2xl shadow-2xl p-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsProfileMenuOpen(false);
+                        setIsMobileMenuOpen(false);
+                        setIsChangePasswordModalOpen(true);
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-xl text-xs text-slate-300 hover:bg-[#1B2638] hover:text-white"
+                    >
+                      Change password
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="w-full text-left px-3 py-2 rounded-xl text-xs text-rose-400 hover:bg-rose-500/10"
+                    >
+                      Log out
+                    </button>
+                  </div>
+                )}
               </div>
-
-              <button
-                onClick={handleLogout}
-                className="w-full flex items-center gap-2 px-4 py-3 rounded-xl border border-slate-800 hover:border-rose-500/40 text-xs font-semibold text-slate-400 hover:text-rose-400 transition cursor-pointer bg-[#131A27]"
-              >
-                <LogOut className="w-4 h-4" />
-                <span>Log out</span>
-              </button>
             </div>
           </aside>
         </div>
@@ -4503,6 +4790,70 @@ export default function App() {
                 className="w-full py-2.5 bg-gradient-to-r from-cyan-400 to-teal-400 hover:opacity-95 text-slate-950 font-bold rounded-xl text-xs transition cursor-pointer shadow-lg shadow-cyan-500/10 mt-3"
               >
                 Create Note / List
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isChangePasswordModalOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-[#0F141E] border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-5">
+              <div>
+                <h3 className="text-base font-bold text-white">
+                  Change password
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Use the same password requirements as sign up.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsChangePasswordModalOpen(false)}
+                className="text-slate-400 hover:text-white"
+                aria-label="Close change password dialog"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              <label className="block text-xs font-medium text-slate-300">
+                Current password
+                <input
+                  required
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  className="mt-1 w-full bg-[#070A0F] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-400"
+                />
+              </label>
+              <label className="block text-xs font-medium text-slate-300">
+                New password
+                <input
+                  required
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Min 8 chars, 1 uppercase, 1 symbol"
+                  className="mt-1 w-full bg-[#070A0F] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                />
+              </label>
+              <label className="block text-xs font-medium text-slate-300">
+                Confirm new password
+                <input
+                  required
+                  type="password"
+                  value={newConfirmPassword}
+                  onChange={(e) => setNewConfirmPassword(e.target.value)}
+                  className="mt-1 w-full bg-[#070A0F] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-400"
+                />
+              </label>
+              <button
+                type="submit"
+                className="w-full py-2.5 bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 font-bold rounded-xl text-xs"
+              >
+                Change password
               </button>
             </form>
           </div>

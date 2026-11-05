@@ -41,10 +41,12 @@ model User {
   status       String @default("HOME")
 
   // Legacy fields kept temporarily to preserve existing accounts/roles
-  role                   String? @default("MEMBER")
+  role                   String?   @default("MEMBER")
   householdId            String?
-  isEmailVerified        Boolean @default(false)
+  isEmailVerified        Boolean   @default(false)
   emailVerificationToken String?
+  passwordResetTokenHash String?   @unique
+  passwordResetExpiresAt DateTime?
 
   // New multi-household fields
   activeHouseholdId     String?

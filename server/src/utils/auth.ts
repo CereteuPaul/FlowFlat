@@ -89,3 +89,7 @@ export function generateInviteCode(): string {
 export function generateEmailToken(): string {
   return crypto.randomBytes(32).toString("hex");
 }
+
+export function hashEmailToken(token: string): string {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
