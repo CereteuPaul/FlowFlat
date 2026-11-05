@@ -292,6 +292,9 @@ export default function App() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newConfirmPassword, setNewConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showNewConfirmPassword, setShowNewConfirmPassword] = useState(false);
+  const [passwordChangeSuccess, setPasswordChangeSuccess] = useState('');
   const [householdName, setHouseholdName] = useState('');
   const [inviteCodeInput, setInviteCodeInput] = useState('');
   const [householdError, setHouseholdError] = useState('');
@@ -992,6 +995,7 @@ export default function App() {
   async function handleChangePassword(e: React.FormEvent) {
     e.preventDefault();
     setAuthError('');
+    setPasswordChangeSuccess('');
     try {
       const data = await apiFetch('/auth/change-password', {
         method: 'POST',
@@ -1005,9 +1009,11 @@ export default function App() {
       setCurrentPassword('');
       setNewPassword('');
       setNewConfirmPassword('');
-      alert(data.message);
+      setShowNewPassword(false);
+      setShowNewConfirmPassword(false);
+      setPasswordChangeSuccess(data.message);
     } catch (err: any) {
-      alert(err.message);
+      setAuthError(err.message);
     }
   }
 
@@ -1856,6 +1862,8 @@ export default function App() {
                   type="button"
                   onClick={() => {
                     setIsProfileMenuOpen(false);
+                    setPasswordChangeSuccess('');
+                    setAuthError('');
                     setIsChangePasswordModalOpen(true);
                   }}
                   className="w-full text-left px-3 py-2 rounded-xl text-xs text-slate-300 hover:bg-[#161F30] hover:text-white"
@@ -1876,6 +1884,13 @@ export default function App() {
           <div className="h-6 w-px bg-slate-800" />
         </div>
       </header>
+
+      {passwordChangeSuccess && (
+        <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span>{passwordChangeSuccess}</span>
+        </div>
+      )}
 
       {isMobileMenuOpen && (
         <div className="min-[1440px]:hidden fixed inset-0 z-50">
@@ -2016,6 +2031,8 @@ export default function App() {
                       onClick={() => {
                         setIsProfileMenuOpen(false);
                         setIsMobileMenuOpen(false);
+                        setPasswordChangeSuccess('');
+                        setAuthError('');
                         setIsChangePasswordModalOpen(true);
                       }}
                       className="w-full text-left px-3 py-2 rounded-xl text-xs text-slate-300 hover:bg-[#1B2638] hover:text-white"
@@ -4818,6 +4835,11 @@ export default function App() {
               </button>
             </div>
             <form onSubmit={handleChangePassword} className="space-y-4">
+              {authError && (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">
+                  {authError}
+                </div>
+              )}
               <label className="block text-xs font-medium text-slate-300">
                 Current password
                 <input
@@ -4830,24 +4852,54 @@ export default function App() {
               </label>
               <label className="block text-xs font-medium text-slate-300">
                 New password
-                <input
-                  required
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Min 8 chars, 1 uppercase, 1 symbol"
-                  className="mt-1 w-full bg-[#070A0F] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
-                />
+                <div className="relative mt-1">
+                  <input
+                    required
+                    type={showNewPassword ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Min 8 chars, 1 uppercase, 1 symbol"
+                    className="w-full bg-[#070A0F] border border-slate-800 rounded-xl px-3.5 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword((value) => !value)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                    aria-label="Toggle new password visibility"
+                  >
+                    {showNewPassword ? (
+                      <EyeOff className="w-3.5 h-3.5" />
+                    ) : (
+                      <Eye className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
               </label>
               <label className="block text-xs font-medium text-slate-300">
                 Confirm new password
-                <input
-                  required
-                  type="password"
-                  value={newConfirmPassword}
-                  onChange={(e) => setNewConfirmPassword(e.target.value)}
-                  className="mt-1 w-full bg-[#070A0F] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-400"
-                />
+                <div className="relative mt-1">
+                  <input
+                    required
+                    type={showNewConfirmPassword ? 'text' : 'password'}
+                    value={newConfirmPassword}
+                    onChange={(e) => setNewConfirmPassword(e.target.value)}
+                    className="w-full bg-[#070A0F] border border-slate-800 rounded-xl px-3.5 pr-10 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowNewConfirmPassword((value) => !value)
+                    }
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                    aria-label="Toggle password confirmation visibility"
+                  >
+                    {showNewConfirmPassword ? (
+                      <EyeOff className="w-3.5 h-3.5" />
+                    ) : (
+                      <Eye className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
               </label>
               <button
                 type="submit"
