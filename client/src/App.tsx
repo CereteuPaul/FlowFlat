@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch, setToken, clearToken, getToken } from './api/client';
 import {
   Home,
@@ -33,6 +33,8 @@ import {
   PieChart as PieIcon,
   CheckCheck,
   ChevronDown,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 interface Member {
@@ -114,6 +116,7 @@ export default function App() {
   const [successorId, setSuccessorId] = useState('');
 
   const [showHouseholdMenu, setShowHouseholdMenu] = useState(false);
+  const householdDropdownRef = useRef<HTMLDivElement>(null);
 
   // Top header tab controller
   const [activeTab, setActiveTab] = useState<
@@ -214,6 +217,8 @@ export default function App() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [authSuccess, setAuthSuccess] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [householdName, setHouseholdName] = useState('');
   const [inviteCodeInput, setInviteCodeInput] = useState('');
   const [householdError, setHouseholdError] = useState('');
@@ -648,6 +653,20 @@ export default function App() {
     }
   }
 
+
+  // Close household dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        householdDropdownRef.current &&
+        !householdDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowHouseholdMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
   async function handleSwitchHousehold(householdId: string) {
     try {
       await apiFetch('/households/switch-active', {
@@ -1054,14 +1073,24 @@ export default function App() {
               <label className="block text-xs font-medium text-slate-300 mb-1.5">
                 Password
               </label>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Min 8 chars, 1 uppercase, 1 symbol"
-                className="w-full bg-[#070A0F] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Min 8 chars, 1 uppercase, 1 symbol"
+                  className="w-full bg-[#070A0F] border border-slate-800 rounded-xl px-3.5 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
             </div>
 
             {isRegister && (
@@ -1069,14 +1098,24 @@ export default function App() {
                 <label className="block text-xs font-medium text-slate-300 mb-1.5">
                   Confirm Password
                 </label>
-                <input
-                  type="password"
-                  required
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Repeat password"
-                  className="w-full bg-[#070A0F] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
-                />
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Repeat password"
+                    className="w-full bg-[#070A0F] border border-slate-800 rounded-xl px-3.5 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition"
+                    tabIndex={-1}
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
               </div>
             )}
 
@@ -1243,7 +1282,7 @@ export default function App() {
               {/* <span className="font-bold text-white text-sm tracking-tight">
                 {currentUser.household?.name}
               </span> */}
-              <div className="relative">
+              <div className="relative" ref={householdDropdownRef}>
                 <button
                   onClick={() => setShowHouseholdMenu(!showHouseholdMenu)}
                   className="flex items-center gap-2 bg-[#131A27] px-3.5 py-2 rounded-2xl border border-slate-800 hover:border-slate-700 transition"
@@ -1282,7 +1321,7 @@ export default function App() {
 
                     <div className="border-t border-slate-800 mt-2 pt-2">
                       <button
-                        onClick={() => setIsJoinOrCreateModalOpen(true)}
+                        onClick={() => { setShowHouseholdMenu(false); setIsJoinOrCreateModalOpen(true); }}
                         className="w-full flex items-center gap-2 px-3 py-2 text-xs text-cyan-400 hover:bg-cyan-500/10 rounded-xl font-medium transition"
                       >
                         <Plus className="w-3.5 h-3.5" />
