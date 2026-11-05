@@ -18,7 +18,6 @@ import {
   ArrowUpRight,
   Sparkles,
   Receipt,
-  Calendar,
   Copy,
   Wifi,
   CreditCard,
@@ -156,6 +155,8 @@ export default function App() {
   const [showHouseholdMenu, setShowHouseholdMenu] = useState(false);
   const householdDropdownRef = useRef<HTMLDivElement>(null);
   const mobileHouseholdDropdownRef = useRef<HTMLDivElement>(null);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+  const mobileProfileMenuRef = useRef<HTMLDivElement>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Top header tab controller
@@ -834,9 +835,13 @@ export default function App() {
         (!householdDropdownRef.current ||
           !householdDropdownRef.current.contains(target)) &&
         (!mobileHouseholdDropdownRef.current ||
-          !mobileHouseholdDropdownRef.current.contains(target))
+          !mobileHouseholdDropdownRef.current.contains(target)) &&
+        (!profileMenuRef.current || !profileMenuRef.current.contains(target)) &&
+        (!mobileProfileMenuRef.current ||
+          !mobileProfileMenuRef.current.contains(target))
       ) {
         setShowHouseholdMenu(false);
+        setIsProfileMenuOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -1832,7 +1837,7 @@ export default function App() {
         </nav>
 
         <div className="hidden min-[1440px]:flex items-center gap-4">
-          <div className="relative">
+          <div className="relative" ref={profileMenuRef}>
             <button
               type="button"
               onClick={() => setIsProfileMenuOpen((value) => !value)}
@@ -2000,7 +2005,7 @@ export default function App() {
                 ))}
               </nav>
 
-              <div className="relative">
+              <div className="relative" ref={mobileProfileMenuRef}>
                 <button
                   type="button"
                   onClick={() => setIsProfileMenuOpen((value) => !value)}
