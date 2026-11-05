@@ -33,95 +33,100 @@ model JoinRequest {
 }
 
 model User {
-  id                 String            @id @default(uuid())
-  name               String
-  email              String            @unique
-  passwordHash       String
-  avatarColor        String            @default("#06B6D4")
-  status             String            @default("HOME")
-  
+  id           String @id @default(uuid())
+  name         String
+  email        String @unique
+  passwordHash String
+  avatarColor  String @default("#06B6D4")
+  status       String @default("HOME")
+
   // Legacy fields kept temporarily to preserve existing accounts/roles
-  role               String?           @default("MEMBER")
-  householdId        String?
-  isEmailVerified    Boolean           @default(false)
+  role                   String? @default("MEMBER")
+  householdId            String?
+  isEmailVerified        Boolean @default(false)
   emailVerificationToken String?
 
   // New multi-household fields
-  activeHouseholdId  String?
-  activeHousehold    Household?        @relation("ActiveHousehold", fields: [activeHouseholdId], references: [id])
-  memberships        HouseholdMember[]
+  activeHouseholdId     String?
+  activeHousehold       Household?         @relation("ActiveHousehold", fields: [activeHouseholdId], references: [id])
+  memberships           HouseholdMember[]
+  scheduleEntries       ScheduleEntry[]    @relation("ScheduleMember")
+  createdSchedules      ScheduleEntry[]    @relation("ScheduleCreator")
+  scheduleReminders     ScheduleReminder[] @relation("ScheduleReminderRecipient")
+  sentScheduleReminders ScheduleReminder[] @relation("ScheduleReminderSender")
 
-  joinRequests       JoinRequest[]
-  billsPaid          Bill[]            @relation("BillPayer")
-  billSplits         BillSplit[]
-  choresCreated      Chore[]           @relation("ChoreCreator")
-  choresAssigned     Chore[]           @relation("ChoreAssignee")
-  spaceBookings      SpaceBooking[]
-  homeInfosCreated   HomeInfo[]        @relation("HomeInfoCreator")
-  notesCreated       Note[]            @relation("NoteCreator")
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @default(now()) @updatedAt
+  joinRequests     JoinRequest[]
+  billsPaid        Bill[]         @relation("BillPayer")
+  billSplits       BillSplit[]
+  choresCreated    Chore[]        @relation("ChoreCreator")
+  choresAssigned   Chore[]        @relation("ChoreAssignee")
+  spaceBookings    SpaceBooking[]
+  homeInfosCreated HomeInfo[]     @relation("HomeInfoCreator")
+  notesCreated     Note[]         @relation("NoteCreator")
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @default(now()) @updatedAt
 }
 
 model HouseholdMember {
-  id           String    @id @default(uuid())
-  userId       String
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  householdId  String
-  household    Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  role         String    @default("MEMBER") // HOUSEHOLD_ADMIN, MEMBER, RESTRICTED_MEMBER
-  joinedAt     DateTime  @default(now())
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  role        String    @default("MEMBER") // HOUSEHOLD_ADMIN, MEMBER, RESTRICTED_MEMBER
+  joinedAt    DateTime  @default(now())
 
   @@unique([userId, householdId])
 }
 
 model Household {
-  id                 String            @id @default(uuid())
-  name               String
-  inviteCode         String            @unique
-  members            HouseholdMember[]
-  activeUsers        User[]            @relation("ActiveHousehold")
+  id          String            @id @default(uuid())
+  name        String
+  inviteCode  String            @unique
+  members     HouseholdMember[]
+  activeUsers User[]            @relation("ActiveHousehold")
 
-  chores             Chore[]
-  wasteSchedules     WasteSchedule[]
-  bills              Bill[]
-  homeInfos          HomeInfo[]
-  notes              Note[]
-  spaceBookings      SpaceBooking[]
-  joinRequests       JoinRequest[]
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @default(now()) @updatedAt
+  chores            Chore[]
+  wasteSchedules    WasteSchedule[]
+  bills             Bill[]
+  homeInfos         HomeInfo[]
+  notes             Note[]
+  spaceBookings     SpaceBooking[]
+  scheduleEntries   ScheduleEntry[]
+  scheduleReminders ScheduleReminder[]
+  joinRequests      JoinRequest[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @default(now()) @updatedAt
 }
-
 
 model WasteSchedule {
   id          String    @id @default(uuid())
   householdId String
   household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  wasteType   String    // "Plastic/Metal", "Paper", "Organic", "General"
-  colorTag    String    // Hex color badge
-  dayOfWeek   Int       // 0 = Sunday, 1 = Monday, etc.
-  frequency   String    // "WEEKLY" or "BIWEEKLY"
+  wasteType   String // "Plastic/Metal", "Paper", "Organic", "General"
+  colorTag    String // Hex color badge
+  dayOfWeek   Int // 0 = Sunday, 1 = Monday, etc.
+  frequency   String // "WEEKLY" or "BIWEEKLY"
   lastPutOut  DateTime?
 }
 
 model Bill {
-  id            String      @id @default(uuid())
-  householdId   String
-  household     Household   @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  title         String
-  amount        Float
-  currency      String      @default("EUR") // EUR, USD, GBP, RON
-  isRecurring   Boolean     @default(false)
-  recurrence    String      @default("ONE_TIME") // ONE_TIME, MONTHLY, WEEKLY
-  billDate      DateTime    @default(now())
-  dueDate       DateTime
-  paidById      String
-  paidBy        User           @relation("BillPayer", fields: [paidById], references: [id])
-  splits        BillSplit[]
-  isSettled     Boolean     @default(false)
+  id             String      @id @default(uuid())
+  householdId    String
+  household      Household   @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  title          String
+  amount         Float
+  currency       String      @default("EUR") // EUR, USD, GBP, RON
+  isRecurring    Boolean     @default(false)
+  recurrence     String      @default("ONE_TIME") // ONE_TIME, MONTHLY, WEEKLY
+  billDate       DateTime    @default(now())
+  dueDate        DateTime
+  paidById       String
+  paidBy         User        @relation("BillPayer", fields: [paidById], references: [id])
+  splits         BillSplit[]
+  isSettled      Boolean     @default(false)
   lastRemindedAt DateTime?
-  createdAt     DateTime    @default(now())
+  createdAt      DateTime    @default(now())
 }
 
 model BillSplit {
@@ -136,21 +141,22 @@ model BillSplit {
 }
 
 model Chore {
-  id              String    @id @default(uuid())
+  id              String          @id @default(uuid())
   householdId     String
-  household       Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  household       Household       @relation(fields: [householdId], references: [id], onDelete: Cascade)
   title           String
   notes           String?
-  priority        String    @default("AUTO") // "AUTO", "LOW", "MEDIUM", "HIGH"
-  dueDate         DateTime  @default(now())
- createdById     String?
-  createdBy       User?     @relation("ChoreCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  priority        String          @default("AUTO") // "AUTO", "LOW", "MEDIUM", "HIGH"
+  dueDate         DateTime        @default(now())
+  createdById     String?
+  createdBy       User?           @relation("ChoreCreator", fields: [createdById], references: [id], onDelete: SetNull)
   assignedToId    String
-  assignedTo      User      @relation("ChoreAssignee", fields: [assignedToId], references: [id])
+  assignedTo      User            @relation("ChoreAssignee", fields: [assignedToId], references: [id])
   rotationUserIds String[]
-  intervalDays    Int       @default(7)
+  intervalDays    Int             @default(7)
   lastCompletedAt DateTime?
-  createdAt       DateTime  @default(now())
+  scheduleEntries ScheduleEntry[]
+  createdAt       DateTime        @default(now())
 }
 
 model SpaceBooking {
@@ -159,38 +165,85 @@ model SpaceBooking {
   household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
   userId      String
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  spaceName   String    // "Living Room", "Kitchen"
+  spaceName   String // "Living Room", "Kitchen"
   startTime   DateTime
   endTime     DateTime
   note        String?
 }
 
+model ScheduleEntry {
+  id            String             @id @default(uuid())
+  householdId   String
+  household     Household          @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  memberId      String
+  member        User               @relation("ScheduleMember", fields: [memberId], references: [id], onDelete: Cascade)
+  createdById   String
+  createdBy     User               @relation("ScheduleCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  type          String             @default("AVAILABILITY") // AVAILABILITY or CHORE
+  title         String
+  notes         String?
+  location      String?
+  availability  String? // AVAILABLE or BUSY
+  startTime     DateTime
+  endTime       DateTime
+  recurrence    String             @default("ONCE") // ONCE, WEEKLY, BIWEEKLY, MONTHLY
+  recurrenceEnd DateTime?
+  status        String             @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED
+  choreId       String?
+  chore         Chore?             @relation(fields: [choreId], references: [id], onDelete: SetNull)
+  reminders     ScheduleReminder[]
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([householdId, startTime])
+  @@index([memberId, startTime])
+}
+
+model ScheduleReminder {
+  id              String        @id @default(uuid())
+  scheduleEntryId String
+  scheduleEntry   ScheduleEntry @relation(fields: [scheduleEntryId], references: [id], onDelete: Cascade)
+  recipientId     String
+  recipient       User          @relation("ScheduleReminderRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  senderId        String?
+  sender          User?         @relation("ScheduleReminderSender", fields: [senderId], references: [id], onDelete: SetNull)
+  channel         String        @default("IN_APP") // IN_APP or EMAIL
+  reminderType    String        @default("MANUAL") // MANUAL, ONE_DAY, ONE_HOUR
+  scheduledFor    DateTime?
+  createdAt       DateTime      @default(now())
+  readAt          DateTime?
+  household       Household?    @relation(fields: [householdId], references: [id])
+  householdId     String?
+
+  @@unique([scheduleEntryId, recipientId, channel, reminderType, scheduledFor])
+  @@index([recipientId, readAt])
+}
+
 model HomeInfo {
-  id           String    @id @default(uuid())
-  householdId  String
-  household    Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  title        String    // e.g. "Main Wi-Fi", "Rent Transfer IBAN"
-  category     String    // "WIFI", "PAYMENT", "APARTMENT", "EMERGENCY"
-  content      String    // The description or instructions
-  secretValue  String?   // Optional field for one-click copy (e.g., password, IBAN)
-  createdById  String
-  createdBy    User      @relation("HomeInfoCreator", fields: [createdById], references: [id], onDelete: Cascade)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id          String    @id @default(uuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  title       String // e.g. "Main Wi-Fi", "Rent Transfer IBAN"
+  category    String // "WIFI", "PAYMENT", "APARTMENT", "EMERGENCY"
+  content     String // The description or instructions
+  secretValue String? // Optional field for one-click copy (e.g., password, IBAN)
+  createdById String
+  createdBy   User      @relation("HomeInfoCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 model Note {
-  id           String    @id @default(uuid())
-  householdId  String
-  household    Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  title        String
-  category     String    @default("SHOPPING") // "SHOPPING", "HOUSE_SUPPLIES", "GENERAL"
-  content      String?
-  items        Json?     // Array of { id: string, text: string, isChecked: boolean }
-  isPinned     Boolean   @default(false)
-  createdById  String
-  createdBy    User      @relation("NoteCreator", fields: [createdById], references: [id], onDelete: Cascade)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id          String    @id @default(uuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  title       String
+  category    String    @default("SHOPPING") // "SHOPPING", "HOUSE_SUPPLIES", "GENERAL"
+  content     String?
+  items       Json? // Array of { id: string, text: string, isChecked: boolean }
+  isPinned    Boolean   @default(false)
+  createdById String
+  createdBy   User      @relation("NoteCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
-

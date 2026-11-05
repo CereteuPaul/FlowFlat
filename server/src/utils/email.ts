@@ -152,6 +152,33 @@ export async function sendWelcomeEmail(
   });
 }
 
+export async function sendScheduleReminderEmail(
+  toEmail: string,
+  toName: string,
+  title: string,
+  startTime: Date,
+  senderName: string,
+) {
+  const formattedDate = new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(startTime);
+
+  return dispatchEmail({
+    toEmail,
+    toName,
+    subject: `Reminder: ${title}`,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto">
+        <h2>FlowFlat schedule reminder</h2>
+        <p>${senderName} reminded you about <strong>${title}</strong>.</p>
+        <p>Scheduled for: <strong>${formattedDate}</strong></p>
+        <p>Open FlowFlat to update the schedule status.</p>
+      </div>
+    `,
+  });
+}
+
 // 2. Bill / Payment Reminder Email
 export async function sendBillReminderEmail(
   toEmail: string,

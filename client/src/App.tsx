@@ -108,6 +108,43 @@ function formatCurrency(amount: number, currencyCode: string = 'EUR'): string {
   return `${symbol}${amount.toFixed(2)}`;
 }
 
+function toDateTimeLocalValue(date: Date): string {
+  const offset = date.getTimezoneOffset();
+  return new Date(date.getTime() - offset * 60000).toISOString().slice(0, 16);
+}
+
+function getScheduleOccurrences(
+  entry: any,
+  rangeStart: Date,
+  rangeEnd: Date
+): any[] {
+  const occurrences: any[] = [];
+  const firstStart = new Date(entry.startTime);
+  const firstEnd = new Date(entry.endTime);
+  const duration = firstEnd.getTime() - firstStart.getTime();
+  const recurrenceEnd = entry.recurrenceEnd
+    ? new Date(entry.recurrenceEnd)
+    : rangeEnd;
+  const cursor = new Date(firstStart);
+  let guard = 0;
+
+  while (cursor <= rangeEnd && cursor <= recurrenceEnd && guard < 400) {
+    const occurrenceEnd = new Date(cursor.getTime() + duration);
+    if (occurrenceEnd >= rangeStart) {
+      occurrences.push({ ...entry, occurrenceStart: new Date(cursor), occurrenceEnd });
+    }
+
+    if (entry.recurrence === 'ONCE') break;
+    if (entry.recurrence === 'WEEKLY') cursor.setDate(cursor.getDate() + 7);
+    else if (entry.recurrence === 'BIWEEKLY') cursor.setDate(cursor.getDate() + 14);
+    else if (entry.recurrence === 'MONTHLY') cursor.setMonth(cursor.getMonth() + 1);
+    else break;
+    guard += 1;
+  }
+
+  return occurrences;
+}
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -130,9 +167,27 @@ export default function App() {
     | 'home-info'
     | 'bills'
     | 'members'
+    | 'schedule'
   >('overview');
 
   const [notes, setNotes] = useState<any[]>([]);
+  const [scheduleEntries, setScheduleEntries] = useState<any[]>([]);
+  const [scheduleReminders, setScheduleReminders] = useState<any[]>([]);
+  const [scheduleView, setScheduleView] = useState<'month' | 'week'>('month');
+  const [scheduleDate, setScheduleDate] = useState(new Date());
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [scheduleType, setScheduleType] = useState<'AVAILABILITY' | 'CHORE'>(
+    'AVAILABILITY'
+  );
+  const [scheduleTitle, setScheduleTitle] = useState('');
+  const [scheduleNotes, setScheduleNotes] = useState('');
+  const [scheduleLocation, setScheduleLocation] = useState('');
+  const [scheduleAvailability, setScheduleAvailability] = useState('AVAILABLE');
+  const [scheduleStart, setScheduleStart] = useState('');
+  const [scheduleEnd, setScheduleEnd] = useState('');
+  const [scheduleRecurrence, setScheduleRecurrence] = useState('ONCE');
+  const [scheduleRecurrenceEnd, setScheduleRecurrenceEnd] = useState('');
+  const [scheduleMemberId, setScheduleMemberId] = useState('');
   const [selectedNoteCategory, setSelectedNoteCategory] = useState<
     'ALL' | 'SHOPPING' | 'HOUSE_SUPPLIES' | 'GENERAL'
   >('ALL');
@@ -400,6 +455,7 @@ export default function App() {
           await loadPendingRequests();
         }
         await loadDashboardSummary();
+        await loadSchedule();
       }
     } catch {
       clearToken();
@@ -424,6 +480,95 @@ export default function App() {
     }
   }
 
+  async function loadSchedule() {
+      try {
+        const data = await apiFetch('/schedule');
+        setScheduleEntries(data.entries || []);
+        setScheduleReminders(data.reminders || []);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+  function openScheduleModal(type: 'AVAILABILITY' | 'CHORE' = 'AVAILABILITY') {
+      const start = new Date();
+      start.setMinutes(0, 0, 0);
+      const end = new Date(start);
+      end.setHours(end.getHours() + 1);
+      setScheduleType(type);
+      setScheduleTitle('');
+      setScheduleNotes('');
+      setScheduleLocation('');
+      setScheduleAvailability('AVAILABLE');
+      setScheduleStart(toDateTimeLocalValue(start));
+      setScheduleEnd(toDateTimeLocalValue(end));
+      setScheduleRecurrence('ONCE');
+      setScheduleRecurrenceEnd('');
+      setScheduleMemberId(currentUser?.id || '');
+      setIsScheduleModalOpen(true);
+    }
+
+  async function handleCreateScheduleEntry(e: React.FormEvent) {
+      e.preventDefault();
+      try {
+        await apiFetch('/schedule', {
+          method: 'POST',
+          body: JSON.stringify({
+            memberId: scheduleMemberId || currentUser?.id,
+            type: scheduleType,
+            title: scheduleTitle,
+            notes: scheduleNotes,
+            location: scheduleLocation,
+            availability: scheduleAvailability,
+            startTime: new Date(scheduleStart).toISOString(),
+            endTime: new Date(scheduleEnd).toISOString(),
+            recurrence: scheduleRecurrence,
+            recurrenceEnd: scheduleRecurrenceEnd
+              ? new Date(`${scheduleRecurrenceEnd}T23:59:59`).toISOString()
+              : null,
+          }),
+        });
+        setIsScheduleModalOpen(false);
+        await loadSchedule();
+      } catch (err: any) {
+        alert(err.message);
+      }
+    }
+
+  async function handleAddChoreToSchedule(choreId: string) {
+      try {
+        await apiFetch(`/schedule/from-chore/${choreId}`, { method: 'POST' });
+        await loadSchedule();
+      } catch (err: any) {
+        alert(err.message);
+      }
+    }
+
+  async function handleScheduleStatus(id: string, status: string) {
+      try {
+        await apiFetch(`/schedule/${id}/status`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status }),
+        });
+        await loadSchedule();
+      } catch (err: any) {
+        alert(err.message);
+      }
+    }
+
+  async function handleScheduleReminder(id: string) {
+      try {
+        const data = await apiFetch(`/schedule/${id}/remind`, { method: 'POST' });
+        alert(
+          data.emailSent
+            ? 'Reminder sent in-app and by email.'
+            : 'In-app reminder sent. Email delivery is not configured.'
+        );
+        await loadSchedule();
+      } catch (err: any) {
+        alert(err.message);
+      }
+    }
   async function handleToggleSplit(splitId: string) {
     try {
       await apiFetch(`/dashboard/bills/splits/${splitId}/toggle`, {
@@ -681,6 +826,7 @@ export default function App() {
       setShowHouseholdMenu(false);
       await loadProfile();
       await loadDashboardSummary();
+      await loadSchedule();
     } catch (err: any) {
       alert(err.message || 'Failed to switch household.');
     }
@@ -1281,6 +1427,32 @@ export default function App() {
   for (let d = 1; d <= daysInMonth; d++) {
     calendarCells.push(d);
   }
+
+  const scheduleMonthStart = new Date(
+    scheduleDate.getFullYear(),
+    scheduleDate.getMonth(),
+    1
+  );
+  const scheduleGridStart = new Date(scheduleMonthStart);
+  scheduleGridStart.setDate(
+    scheduleGridStart.getDate() - scheduleGridStart.getDay()
+  );
+  const scheduleGridDays = Array.from({ length: scheduleView === 'month' ? 42 : 7 }, (_, index) => {
+    const day = new Date(scheduleGridStart);
+    if (scheduleView === 'week') {
+      day.setDate(scheduleDate.getDate() - scheduleDate.getDay() + index);
+    } else {
+      day.setDate(scheduleGridStart.getDate() + index);
+    }
+    return day;
+  });
+  const scheduleRangeStart = scheduleGridDays[0];
+  const scheduleRangeEnd = new Date(scheduleGridDays[scheduleGridDays.length - 1]);
+  scheduleRangeEnd.setHours(23, 59, 59, 999);
+  const scheduleOccurrences = scheduleEntries.flatMap((entry) =>
+    getScheduleOccurrences(entry, scheduleRangeStart, scheduleRangeEnd)
+  );
+  const householdMembers = currentUser.household?.users || [];
 
   return (
     <div className="min-h-screen bg-[#070A0F] text-slate-100 flex flex-col p-4 md:p-8 gap-6 font-sans selection:bg-cyan-500/30 max-w-7xl mx-auto w-full">
@@ -2141,6 +2313,336 @@ export default function App() {
                 ))}
               </div>
             </div>
+          </div>
+        )}
+
+        {activeTab === 'members' && (
+          <div className="space-y-6">
+            <section className="bg-[#0F141E] border border-slate-800/80 rounded-3xl p-5 md:p-6 shadow-xl">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-5">
+                <div>
+                  <h2 className="text-lg font-black text-white">Shared Schedule</h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Availability and household duties for everyone in the flat.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openScheduleModal()}
+                    className="px-3 py-2 rounded-xl bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 text-xs font-bold"
+                  >
+                    <Plus className="w-3.5 h-3.5 inline mr-1" />
+                    Add availability
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openScheduleModal('CHORE')}
+                    className="px-3 py-2 rounded-xl border border-slate-700 text-xs font-semibold text-slate-300 hover:text-white"
+                  >
+                    Add schedule item
+                  </button>
+                  <div className="flex bg-[#131A27] p-1 rounded-xl border border-slate-800">
+                    {(['month', 'week'] as const).map((view) => (
+                      <button
+                        key={view}
+                        type="button"
+                        onClick={() => setScheduleView(view)}
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold capitalize ${
+                          scheduleView === view
+                            ? 'bg-slate-700 text-white'
+                            : 'text-slate-400'
+                        }`}
+                      >
+                        {view}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {scheduleReminders.length > 0 && (
+                <div className="mb-5 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20">
+                  <p className="text-[11px] font-bold text-amber-300 mb-2">
+                    Reminders for you
+                  </p>
+                  <div className="space-y-1.5">
+                    {scheduleReminders.map((reminder) => (
+                      <button
+                        key={reminder.id}
+                        type="button"
+                        onClick={async () => {
+                          await apiFetch(`/schedule/reminders/${reminder.id}/read`, {
+                            method: 'PATCH',
+                          });
+                          await loadSchedule();
+                        }}
+                        className="block text-left text-xs text-amber-100 hover:text-white"
+                      >
+                        {reminder.sender?.name || 'A household member'} reminded you about{' '}
+                        <strong>{reminder.scheduleEntry.title}</strong>. Click to dismiss.
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between mb-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = new Date(scheduleDate);
+                    next.setDate(next.getDate() - (scheduleView === 'month' ? 1 : 7));
+                    setScheduleDate(next);
+                  }}
+                  className="p-2 rounded-xl border border-slate-800 text-slate-400 hover:text-white"
+                  aria-label="Previous period"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <h3 className="text-sm font-bold text-white">
+                  {scheduleDate.toLocaleString('default', {
+                    month: 'long',
+                    year: 'numeric',
+                  })}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = new Date(scheduleDate);
+                    next.setDate(next.getDate() + (scheduleView === 'month' ? 1 : 7));
+                    setScheduleDate(next);
+                  }}
+                  className="p-2 rounded-xl border border-slate-800 text-slate-400 hover:text-white"
+                  aria-label="Next period"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-7 gap-px bg-slate-800 rounded-2xl overflow-hidden border border-slate-800">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                  <div key={day} className="bg-[#131A27] p-2 text-[10px] font-bold text-slate-500 uppercase">
+                    {day}
+                  </div>
+                ))}
+                {scheduleGridDays.map((day) => {
+                  const dayEntries = scheduleOccurrences.filter((entry) => {
+                    const start = entry.occurrenceStart as Date;
+                    return (
+                      start.getFullYear() === day.getFullYear() &&
+                      start.getMonth() === day.getMonth() &&
+                      start.getDate() === day.getDate()
+                    );
+                  });
+                  const isCurrentMonth = day.getMonth() === scheduleDate.getMonth();
+                  return (
+                    <div
+                      key={day.toISOString()}
+                      className={`min-h-28 bg-[#0F141E] p-2 align-top ${
+                        !isCurrentMonth ? 'opacity-40' : ''
+                      }`}
+                    >
+                      <span className={`text-[11px] font-bold ${day.toDateString() === new Date().toDateString() ? 'text-cyan-400' : 'text-slate-400'}`}>
+                        {day.getDate()}
+                      </span>
+                      <div className="space-y-1 mt-1">
+                        {dayEntries.map((entry, index) => (
+                          <div
+                            key={`${entry.id}-${index}`}
+                            className={`rounded-lg px-2 py-1.5 border text-[10px] ${
+                              entry.type === 'CHORE'
+                                ? 'bg-amber-500/10 border-amber-500/20 text-amber-200'
+                                : entry.availability === 'BUSY'
+                                  ? 'bg-rose-500/10 border-rose-500/20 text-rose-200'
+                                  : 'bg-cyan-500/10 border-cyan-500/20 text-cyan-200'
+                            }`}
+                          >
+                            <p className="font-bold truncate">{entry.title}</p>
+                            <p className="truncate opacity-80">
+                              {entry.member?.name} · {entry.occurrenceStart.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                            </p>
+                            {entry.memberId === currentUser.id && (
+                              <select
+                                value={entry.status}
+                                onChange={(event) => handleScheduleStatus(entry.id, event.target.value)}
+                                className="mt-1 w-full bg-[#070A0F]/70 rounded px-1 py-0.5 text-[9px] text-slate-200"
+                              >
+                                <option value="PENDING">Pending</option>
+                                <option value="IN_PROGRESS">In progress</option>
+                                <option value="COMPLETED">Completed</option>
+                              </select>
+                            )}
+                            {entry.memberId !== currentUser.id && entry.status !== 'COMPLETED' && (
+                              <button
+                                type="button"
+                                onClick={() => handleScheduleReminder(entry.id)}
+                                className="mt-1 text-[9px] underline opacity-80 hover:opacity-100"
+                              >
+                                Remind
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="bg-[#0F141E] border border-slate-800/80 rounded-3xl p-5 md:p-6 shadow-xl">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-sm font-bold text-white">Add existing chores</h3>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Place assigned chores on the shared calendar.
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {chores.map((chore) => {
+                  const isScheduled = scheduleEntries.some((entry) => entry.chore?.id === chore.id);
+                  return (
+                    <div key={chore.id} className="flex items-center justify-between gap-3 p-3 rounded-2xl bg-[#131A27] border border-slate-800">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-white truncate">{chore.title}</p>
+                        <p className="text-[10px] text-slate-500">{chore.assignedTo?.name}</p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={isScheduled}
+                        onClick={() => handleAddChoreToSchedule(chore.id)}
+                        className="shrink-0 px-2.5 py-1.5 rounded-lg text-[10px] font-bold border border-slate-700 text-slate-300 disabled:opacity-40"
+                      >
+                        {isScheduled ? 'On calendar' : 'Add'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          </div>
+        )}
+
+        {isScheduleModalOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <button
+              type="button"
+              aria-label="Close schedule form"
+              onClick={() => setIsScheduleModalOpen(false)}
+              className="absolute inset-0 bg-slate-950/75 backdrop-blur-sm"
+            />
+            <form
+              onSubmit={handleCreateScheduleEntry}
+              className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-[#0F141E] border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-white">New schedule entry</h3>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Add availability or a custom household schedule item.
+                  </p>
+                </div>
+                <button type="button" onClick={() => setIsScheduleModalOpen(false)} className="text-slate-400 hover:text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                {(['AVAILABILITY', 'CHORE'] as const).map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setScheduleType(type)}
+                    className={`py-2 rounded-xl text-xs font-semibold border ${
+                      scheduleType === type
+                        ? 'border-cyan-400 bg-cyan-400/10 text-cyan-300'
+                        : 'border-slate-800 text-slate-400'
+                    }`}
+                  >
+                    {type === 'AVAILABILITY' ? 'Availability' : 'Schedule item'}
+                  </button>
+                ))}
+              </div>
+
+              <label className="block text-xs text-slate-300">
+                Title
+                <input
+                  required
+                  value={scheduleTitle}
+                  onChange={(event) => setScheduleTitle(event.target.value)}
+                  placeholder={scheduleType === 'AVAILABILITY' ? 'Available for flat matters' : 'Gym, appointment, study time'}
+                  className="mt-1 w-full bg-[#070A0F] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-400"
+                />
+              </label>
+
+              {scheduleType === 'AVAILABILITY' && (
+                <label className="block text-xs text-slate-300">
+                  Availability
+                  <select
+                    value={scheduleAvailability}
+                    onChange={(event) => setScheduleAvailability(event.target.value)}
+                    className="mt-1 w-full bg-[#070A0F] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white"
+                  >
+                    <option value="AVAILABLE">Available</option>
+                    <option value="BUSY">Busy</option>
+                  </select>
+                </label>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="block text-xs text-slate-300">
+                  Start
+                  <input required type="datetime-local" value={scheduleStart} onChange={(event) => setScheduleStart(event.target.value)} className="mt-1 w-full bg-[#070A0F] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white" />
+                </label>
+                <label className="block text-xs text-slate-300">
+                  End
+                  <input required type="datetime-local" value={scheduleEnd} onChange={(event) => setScheduleEnd(event.target.value)} className="mt-1 w-full bg-[#070A0F] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white" />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="block text-xs text-slate-300">
+                  Repeats
+                  <select value={scheduleRecurrence} onChange={(event) => setScheduleRecurrence(event.target.value)} className="mt-1 w-full bg-[#070A0F] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white">
+                    <option value="ONCE">One time</option>
+                    <option value="WEEKLY">Weekly</option>
+                    <option value="BIWEEKLY">Every 2 weeks</option>
+                    <option value="MONTHLY">Monthly</option>
+                  </select>
+                </label>
+                <label className="block text-xs text-slate-300">
+                  Repeat until (optional)
+                  <input type="date" value={scheduleRecurrenceEnd} onChange={(event) => setScheduleRecurrenceEnd(event.target.value)} className="mt-1 w-full bg-[#070A0F] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white" />
+                </label>
+              </div>
+
+              <label className="block text-xs text-slate-300">
+                Member
+                <select value={scheduleMemberId} onChange={(event) => setScheduleMemberId(event.target.value)} className="mt-1 w-full bg-[#070A0F] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white">
+                  <option value={currentUser.id}>Me ({currentUser.name})</option>
+                  {householdMembers.filter((member: any) => member.id !== currentUser.id).map((member: any) => (
+                    <option key={member.id} value={member.id}>{member.name}</option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="block text-xs text-slate-300">
+                  Notes
+                  <input value={scheduleNotes} onChange={(event) => setScheduleNotes(event.target.value)} className="mt-1 w-full bg-[#070A0F] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white" />
+                </label>
+                <label className="block text-xs text-slate-300">
+                  Location
+                  <input value={scheduleLocation} onChange={(event) => setScheduleLocation(event.target.value)} className="mt-1 w-full bg-[#070A0F] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white" />
+                </label>
+              </div>
+
+              <button type="submit" className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 text-xs font-bold">
+                Save schedule entry
+              </button>
+            </form>
           </div>
         )}
 
