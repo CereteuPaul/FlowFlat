@@ -94,6 +94,17 @@ interface JoinRequest {
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+function formatCurrency(amount: number, currencyCode: string = 'EUR'): string {
+  const symbols: Record<string, string> = {
+    EUR: '€',
+    USD: '$',
+    GBP: '£',
+    RON: 'RON ',
+  };
+  const symbol = symbols[currencyCode.toUpperCase()] || `${currencyCode} `;
+  return `${symbol}${amount.toFixed(2)}`;
+}
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -896,7 +907,7 @@ export default function App() {
           <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-400 flex justify-between">
             <span>Active Total Volume:</span>
             <span className="text-white font-mono font-bold">
-              €{totalAmount.toFixed(2)}
+              {formatCurrency(totalAmount, activeBills[0]?.currency || 'EUR')}
             </span>
           </div>
         </div>
@@ -1801,7 +1812,7 @@ export default function App() {
                               {bill.title}
                             </p>
                             <span className="text-xs font-black text-cyan-400">
-                              €{bill.amount.toFixed(2)}
+                              {formatCurrency(bill.amount, bill.currency)}
                             </span>
                           </div>
                           <p className="text-[11px] text-slate-400 mb-3">
@@ -1819,8 +1830,7 @@ export default function App() {
                                   : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
                               }`}
                             >
-                              {split.user.name.split(' ')[0]}: €
-                              {split.amountOwed.toFixed(2)}
+                              {split.user.name.split(' ')[0]}: {formatCurrency(split.amountOwed, bill.currency)}
                             </span>
                           ))}
                         </div>
@@ -2766,14 +2776,7 @@ export default function App() {
                   {bills
                     .filter((b) => !b.isSettled)
                     .map((bill) => {
-                      const currencySymbol =
-                        bill.currency === 'USD'
-                          ? '$'
-                          : bill.currency === 'GBP'
-                            ? '£'
-                            : bill.currency === 'RON'
-                              ? 'lei '
-                              : '€';
+                      // currency handled by formatCurrency
 
                       const dueDateObj = new Date(bill.dueDate);
                       const isPastDue = dueDateObj.getTime() < Date.now();
@@ -2828,8 +2831,7 @@ export default function App() {
                                 {bill.title}
                               </h4>
                               <span className="text-base font-black text-cyan-400 font-mono">
-                                {currencySymbol}
-                                {bill.amount.toFixed(2)}
+                                {formatCurrency(bill.amount, bill.currency)}
                               </span>
                             </div>
 
@@ -2855,8 +2857,7 @@ export default function App() {
                                   </span>
                                   <div className="flex items-center gap-2">
                                     <span className="font-mono text-[11px] text-slate-400 font-medium">
-                                      {currencySymbol}
-                                      {split.amountOwed.toFixed(2)}
+                                      {formatCurrency(split.amountOwed, bill.currency)}
                                     </span>
                                     <button
                                       type="button"
@@ -2919,14 +2920,7 @@ export default function App() {
                   {bills
                     .filter((b) => b.isSettled)
                     .map((bill) => {
-                      const currencySymbol =
-                        bill.currency === 'USD'
-                          ? '$'
-                          : bill.currency === 'GBP'
-                            ? '£'
-                            : bill.currency === 'RON'
-                              ? 'lei '
-                              : '€';
+                      // currency handled by formatCurrency
 
                       return (
                         <div
@@ -2943,8 +2937,7 @@ export default function App() {
                               </span>
                             </div>
                             <p className="text-[10px] text-slate-500 mt-0.5">
-                              {currencySymbol}
-                              {bill.amount.toFixed(2)} • Paid by{' '}
+                              {formatCurrency(bill.amount, bill.currency)} • Paid by{' '}
                               {bill.paidBy.name}
                             </p>
                           </div>
