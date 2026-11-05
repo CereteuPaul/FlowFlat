@@ -653,7 +653,6 @@ export default function App() {
     }
   }
 
-
   // Close household dropdown on outside click
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -923,12 +922,12 @@ export default function App() {
             </span>
           </div>
 
-          <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-400 flex justify-between">
+          {/* <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-400 flex justify-between">
             <span>Active Total Volume:</span>
             <span className="text-white font-mono font-bold">
               {formatCurrency(totalAmount, activeBills[0]?.currency || 'EUR')}
             </span>
-          </div>
+          </div> */}
         </div>
       </div>
     );
@@ -1088,7 +1087,11 @@ export default function App() {
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition"
                   tabIndex={-1}
                 >
-                  {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  {showPassword ? (
+                    <EyeOff className="w-3.5 h-3.5" />
+                  ) : (
+                    <Eye className="w-3.5 h-3.5" />
+                  )}
                 </button>
               </div>
             </div>
@@ -1113,7 +1116,11 @@ export default function App() {
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition"
                     tabIndex={-1}
                   >
-                    {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    {showConfirmPassword ? (
+                      <EyeOff className="w-3.5 h-3.5" />
+                    ) : (
+                      <Eye className="w-3.5 h-3.5" />
+                    )}
                   </button>
                 </div>
               </div>
@@ -1321,7 +1328,10 @@ export default function App() {
 
                     <div className="border-t border-slate-800 mt-2 pt-2">
                       <button
-                        onClick={() => { setShowHouseholdMenu(false); setIsJoinOrCreateModalOpen(true); }}
+                        onClick={() => {
+                          setShowHouseholdMenu(false);
+                          setIsJoinOrCreateModalOpen(true);
+                        }}
                         className="w-full flex items-center gap-2 px-3 py-2 text-xs text-cyan-400 hover:bg-cyan-500/10 rounded-xl font-medium transition"
                       >
                         <Plus className="w-3.5 h-3.5" />
@@ -1869,7 +1879,8 @@ export default function App() {
                                   : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
                               }`}
                             >
-                              {split.user.name.split(' ')[0]}: {formatCurrency(split.amountOwed, bill.currency)}
+                              {split.user.name.split(' ')[0]}:{' '}
+                              {formatCurrency(split.amountOwed, bill.currency)}
                             </span>
                           ))}
                         </div>
@@ -2896,7 +2907,10 @@ export default function App() {
                                   </span>
                                   <div className="flex items-center gap-2">
                                     <span className="font-mono text-[11px] text-slate-400 font-medium">
-                                      {formatCurrency(split.amountOwed, bill.currency)}
+                                      {formatCurrency(
+                                        split.amountOwed,
+                                        bill.currency
+                                      )}
                                     </span>
                                     <button
                                       type="button"
@@ -2976,8 +2990,8 @@ export default function App() {
                               </span>
                             </div>
                             <p className="text-[10px] text-slate-500 mt-0.5">
-                              {formatCurrency(bill.amount, bill.currency)} • Paid by{' '}
-                              {bill.paidBy.name}
+                              {formatCurrency(bill.amount, bill.currency)} •
+                              Paid by {bill.paidBy.name}
                             </p>
                           </div>
 
