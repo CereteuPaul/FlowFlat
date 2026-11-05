@@ -35,6 +35,7 @@ import {
   ChevronDown,
   Eye,
   EyeOff,
+  Menu,
 } from 'lucide-react';
 
 interface Member {
@@ -117,6 +118,8 @@ export default function App() {
 
   const [showHouseholdMenu, setShowHouseholdMenu] = useState(false);
   const householdDropdownRef = useRef<HTMLDivElement>(null);
+  const mobileHouseholdDropdownRef = useRef<HTMLDivElement>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Top header tab controller
   const [activeTab, setActiveTab] = useState<
@@ -656,9 +659,12 @@ export default function App() {
   // Close household dropdown on outside click
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Node;
       if (
-        householdDropdownRef.current &&
-        !householdDropdownRef.current.contains(event.target as Node)
+        (!householdDropdownRef.current ||
+          !householdDropdownRef.current.contains(target)) &&
+        (!mobileHouseholdDropdownRef.current ||
+          !mobileHouseholdDropdownRef.current.contains(target))
       ) {
         setShowHouseholdMenu(false);
       }
@@ -1279,8 +1285,25 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#070A0F] text-slate-100 flex flex-col p-4 md:p-8 gap-6 font-sans selection:bg-cyan-500/30 max-w-7xl mx-auto w-full">
       {/* 1. TOP HEADER WITH CENTRAL TABS & LOGOUT */}
-      <header className="bg-[#0F141E] border border-slate-800/80 rounded-3xl px-6 py-4 flex items-center justify-between shadow-2xl">
-        <div className="flex items-center gap-3">
+      <header className="bg-[#0F141E] border border-slate-800/80 rounded-3xl px-4 py-3 md:px-6 md:py-4 flex items-center justify-between shadow-2xl">
+        <div className="flex items-center gap-3 md:hidden">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-cyan-500 to-teal-400 flex items-center justify-center text-slate-950 font-black shadow-lg shadow-cyan-500/10">
+            <Home className="w-5 h-5" />
+          </div>
+          <span className="text-sm font-bold text-white">FlowFlat</span>
+        </div>
+
+        <button
+          type="button"
+          aria-label="Open navigation menu"
+          aria-expanded={isMobileMenuOpen}
+          onClick={() => setIsMobileMenuOpen(true)}
+          className="md:hidden flex items-center justify-center w-10 h-10 rounded-xl border border-slate-800 bg-[#131A27] text-slate-300 hover:text-white hover:border-slate-700 transition"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+
+        <div className="hidden md:flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-cyan-500 to-teal-400 flex items-center justify-center text-slate-950 font-black shadow-lg shadow-cyan-500/10">
             <Home className="w-5 h-5" />
           </div>
@@ -1348,7 +1371,7 @@ export default function App() {
           </div>
         </div>
 
-        <nav className="flex items-center gap-1 bg-[#131A27] p-1.5 rounded-2xl border border-slate-800/60">
+        <nav className="hidden md:flex items-center gap-1 bg-[#131A27] p-1.5 rounded-2xl border border-slate-800/60">
           {[
             { id: 'overview', label: 'Overview' },
             { id: 'chores', label: 'Chores' },
@@ -1372,7 +1395,7 @@ export default function App() {
           ))}
         </nav>
 
-        <div className="flex items-center gap-4">
+        <div className="hidden md:flex items-center gap-4">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-400 font-bold text-xs flex items-center justify-center shadow-inner">
               {currentUser.name.charAt(0).toUpperCase()}
@@ -1403,6 +1426,144 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {isMobileMenuOpen && (
+        <div className="md:hidden fixed inset-0 z-50">
+          <button
+            type="button"
+            aria-label="Close navigation menu"
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm cursor-default"
+          />
+
+          <aside
+            aria-label="Mobile navigation"
+            className="relative h-full w-[min(86vw,22rem)] bg-[#0F141E] border-r border-slate-800 shadow-2xl p-5 flex flex-col overflow-y-auto"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <span className="text-sm font-bold text-white">Menu</span>
+              <button
+                type="button"
+                aria-label="Close navigation menu"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="flex items-center justify-center w-9 h-9 rounded-xl border border-slate-800 bg-[#131A27] text-slate-300 hover:text-white hover:border-slate-700 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-5">
+              <div className="relative" ref={mobileHouseholdDropdownRef}>
+                <button
+                  onClick={() => setShowHouseholdMenu(!showHouseholdMenu)}
+                  className="w-full flex items-center gap-2 bg-[#131A27] px-3.5 py-3 rounded-2xl border border-slate-800 hover:border-slate-700 transition text-left"
+                >
+                  <Home className="w-4 h-4 text-cyan-400" />
+                  <span className="text-sm font-bold text-white truncate">
+                    {currentUser?.household?.name ||
+                      currentUser?.activeHousehold?.name ||
+                      'My Household'}
+                  </span>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 ml-auto" />
+                </button>
+
+                {showHouseholdMenu && (
+                  <div className="mt-2 w-full bg-[#131A27] border border-slate-800 rounded-2xl shadow-2xl p-2">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase px-3 py-1 block">
+                      My Households
+                    </span>
+                    {currentUser?.memberships?.map((m) => (
+                      <button
+                        key={m.household.id}
+                        onClick={() => {
+                          setShowHouseholdMenu(false);
+                          handleSwitchHousehold(m.household.id);
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition ${
+                          m.household.id === currentUser.activeHouseholdId
+                            ? 'bg-cyan-500/10 text-cyan-400 font-bold'
+                            : 'text-slate-300 hover:bg-[#161F30]'
+                        }`}
+                      >
+                        <span>{m.household.name}</span>
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          {m.role === 'HOUSEHOLD_ADMIN' ? 'Admin' : 'Member'}
+                        </span>
+                      </button>
+                    ))}
+                    <div className="border-t border-slate-800 mt-2 pt-2">
+                      <button
+                        onClick={() => {
+                          setShowHouseholdMenu(false);
+                          setIsMobileMenuOpen(false);
+                          setIsJoinOrCreateModalOpen(true);
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-cyan-400 hover:bg-cyan-500/10 rounded-xl font-medium transition"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Join / Create Another Flat</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <nav className="flex flex-col gap-1 bg-[#131A27] p-1.5 rounded-2xl border border-slate-800/60">
+                {[
+                  { id: 'overview', label: 'Overview' },
+                  { id: 'chores', label: 'Chores' },
+                  { id: 'waste', label: 'Waste' },
+                  { id: 'notes', label: 'Notes' },
+                  { id: 'home-info', label: 'Home Info' },
+                  ...(!isRestricted ? [{ id: 'bills', label: 'Bills' }] : []),
+                  { id: 'members', label: 'Members' },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      setActiveTab(tab.id as any);
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className={`w-full text-left px-4 py-3 text-xs font-semibold rounded-xl transition cursor-pointer ${
+                      activeTab === tab.id
+                        ? 'bg-gradient-to-tr from-cyan-500 to-teal-400 text-slate-950 font-bold shadow-md shadow-cyan-500/10'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </nav>
+
+              <div className="flex items-center gap-3 px-2">
+                <div className="w-9 h-9 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-400 font-bold text-xs flex items-center justify-center shadow-inner">
+                  {currentUser.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="text-left">
+                  <p className="text-xs font-semibold text-white leading-tight">
+                    {currentUser.name}
+                  </p>
+                  <p className="text-[10px] text-cyan-400 font-medium">
+                    {currentUser.role === 'HOUSEHOLD_ADMIN'
+                      ? 'Flat Admin'
+                      : currentUser.role === 'RESTRICTED_MEMBER'
+                        ? 'Restricted'
+                        : 'Flatmate'}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-2 px-4 py-3 rounded-xl border border-slate-800 hover:border-rose-500/40 text-xs font-semibold text-slate-400 hover:text-rose-400 transition cursor-pointer bg-[#131A27]"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Log out</span>
+              </button>
+            </div>
+          </aside>
+        </div>
+      )}
 
       {/* 2. DYNAMIC TAB VIEW CANVAS */}
       <main className="flex-1 space-y-6">
